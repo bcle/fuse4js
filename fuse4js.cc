@@ -257,7 +257,10 @@ Handle<Value> Start(const Arguments& args) {
   }
   strncpy(f4js.root, root, sizeof(f4js.root));
   f4js.handlers = Persistent<Object>::New(Local<Object>::Cast(args[1]));
-  
+
+  sem_init(&f4js.sem, 0, 0);
+  uv_async_init(uv_default_loop(), &f4js.async, F4jsAsyncCb);
+
   pthread_attr_t attr;
   pthread_attr_init(&attr);
   pthread_create(&f4js.fuse_thread, &attr, fuse_thread, NULL);
@@ -268,8 +271,6 @@ Handle<Value> Start(const Arguments& args) {
 void init(Handle<Object> target) {
   target->Set(String::NewSymbol("hello"), FunctionTemplate::New(Method)->GetFunction());
   target->Set(String::NewSymbol("start"), FunctionTemplate::New(Start)->GetFunction());
-  sem_init(&f4js.sem, 0, 0);
-  uv_async_init(uv_default_loop(), &f4js.async, F4jsAsyncCb);
 }
 
 
