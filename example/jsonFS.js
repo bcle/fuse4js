@@ -35,16 +35,6 @@ function lookup(root, path) {
 }
 
 /*
-var x = lookup(obj, '/');
-x = lookup(obj, '/hello.txt');
-x = lookup(obj, '/goodbye.txt');
-x = lookup(obj, '/dir1');
-x = lookup(obj, '/dir1/welcome.txt');
-x = lookup(obj, '/dir1/xxx');
-x = lookup(obj, '/dir1/dir2/dummy.txt');
-*/
-
-/*
  * Handler for the getattr() system call.
  * path: the path to the file
  * cb: a callback of the form cb(err, stat), where err is the Posix return code
@@ -52,12 +42,12 @@ x = lookup(obj, '/dir1/dir2/dummy.txt');
  */
 var getattr = function (path, cb) {	
   var stat = {};
-  var ret = 0;
+  var err = 0; // assume success
   var node = lookup(obj, path);
 
   switch (typeof node) {
   case 'undefined':
-    ret = -2; // -ENOENT
+    err = -2; // -ENOENT
     break;
     
   case 'object': // directory
@@ -73,28 +63,27 @@ var getattr = function (path, cb) {
   default:
     break;
   }
-  cb( ret, stat );
+  cb( err, stat );
 };
 
 /*
  * Handler for the readdir() system call.
  * path: the path to the file
  * cb: a callback of the form cb(err, names), where err is the Posix return code
- *     and names is the result in the form of an array of file names
- *     (when err === 0).
+ *     and names is the result in the form of an array of file names (when err === 0).
  */
 var readdir = function (path, cb) {
   var names = [];
-  var ret = 0;
+  var err = 0; // assume success
   var node = lookup(obj, path);
 
   switch (typeof node) {
   case 'undefined':
-    ret = -2; // -ENOENT
+    err = -2; // -ENOENT
     break;
     
   case 'string': // file
-    ret = -22; // -EINVAL
+    err = -22; // -EINVAL
     break;
   
   case 'object': // directory
@@ -106,8 +95,7 @@ var readdir = function (path, cb) {
   default:
     break;
   }
-  cb( ret, names );
-  
+  cb( err, names );
 }
 
 var handlers = {

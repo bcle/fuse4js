@@ -20,14 +20,8 @@
 #endif
 
 #include <fuse.h>
-// #include <pthread.h>
 #include <semaphore.h>
-//#include <math.h>
 #include <string>
-
-/*
-#include <vector>
-*/
 
 using namespace v8;
 
@@ -47,13 +41,6 @@ enum fuseop_t {
   OP_READDIR = 2
 };
 
-/*
-typedef struct {
-  std::string name;
-  mode_t mode;
-} file_name_and_mode_t;
-*/
-
 static struct {
   enum fuseop_t op;
   const char *in_path;
@@ -64,11 +51,12 @@ static struct {
     struct {
       void *buf;
       fuse_fill_dir_t filler;
-      // std::vector<std::string> dirents;
     } readdir;
   } u;
   int retval;
 } f4js_cmd;
+
+// ---------------------------------------------------------------------------
 
 static int getattr(const char *path, struct stat *stbuf)
 {
@@ -80,6 +68,8 @@ static int getattr(const char *path, struct stat *stbuf)
   return f4js_cmd.retval;
 }
 
+// ---------------------------------------------------------------------------
+
 static int readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		       off_t offset, struct fuse_file_info *fi)
 {
@@ -89,32 +79,10 @@ static int readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   f4js_cmd.u.readdir.filler = filler;
   uv_async_send(&f4js.async);
   sem_wait(&f4js.sem);  
-  return f4js_cmd.retval;
-  
-  /*
-  DIR *dp;
-  struct dirent *de;
-  
-  (void) offset;
-  (void) fi;
-  
-  dp = opendir(path);
-  if (dp == NULL)
-    return -errno;
-  
-  while ((de = readdir(dp)) != NULL) {
-    struct stat st;
-    memset(&st, 0, sizeof(st));
-    st.st_ino = de->d_ino;
-    st.st_mode = de->d_type << 12;
-    if (filler(buf, de->d_name, &st, 0))
-      break;
-  }
-  
-  closedir(dp);
-  */
-  return 0;
+  return f4js_cmd.retval;  
 }
+
+// ---------------------------------------------------------------------------
 
 void *fuse_thread(void *)
 {
@@ -174,9 +142,7 @@ Handle<Value> ReadDirCb(const Arguments& args)
           Local<String> name = Local<String>::Cast(el);
           String::AsciiValue av(name);          
           struct stat st;
-          memset(&st, 0, sizeof(st));
-          st.st_ino = 0;
-          st.st_mode = 33261; // Octal 0100755 : file with 755 permissions
+          memset(&st, 0, sizeof(st)); // structure not used. Zero everything.
           if (f4js_cmd.u.readdir.filler(f4js_cmd.u.readdir.buf, *av, &st, 0))
             break;            
         }
@@ -231,10 +197,7 @@ static void F4jsAsyncCb(uv_async_t* handle, int status) {
   handler->Call(Context::GetCurrent()->Global(), 2, argv);  
 }
 
-Handle<Value> Method(const Arguments& args) {
-  HandleScope scope;
-  return scope.Close(String::New("world"));
-}
+// ---------------------------------------------------------------------------
 
 Handle<Value> Start(const Arguments& args) {
   HandleScope scope;
@@ -267,11 +230,12 @@ Handle<Value> Start(const Arguments& args) {
   return scope.Close(String::New("dummy"));
 }
 
+// ---------------------------------------------------------------------------
 
 void init(Handle<Object> target) {
-  target->Set(String::NewSymbol("hello"), FunctionTemplate::New(Method)->GetFunction());
   target->Set(String::NewSymbol("start"), FunctionTemplate::New(Start)->GetFunction());
 }
 
+// ---------------------------------------------------------------------------
 
 NODE_MODULE(fuse4js, init)
