@@ -33,15 +33,13 @@ var getattr = function (path, cb) {
 /*
  * Handler for the readdir() system call.
  * path: the path to the file
- * cb: a callback of the form cb(err, dirents), where err is the Posix return code
- *     and dirents is the result in the form of an array of directory entry objects
- *     (when err === 0). Each directory entry object must have two fields: name, and st_mode
+ * cb: a callback of the form cb(err, names), where err is the Posix return code
+ *     and names is the result in the form of an array of file names
+ *     (when err === 0).
  */
 var readdir = function (path, cb) {
   cb( 0,
-      [ { name: 'hello.txt', st_mode: 33261},
-        { name: 'dir1',      st_mode: 16877}
-      ]
+      [ 'hello.txt',  'dir1', 'world.txt' ]
   );
 }
 

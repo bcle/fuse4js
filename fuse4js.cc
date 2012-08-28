@@ -169,21 +169,16 @@ Handle<Value> ReadDirCb(const Arguments& args)
     if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsArray()) {
       Handle<Array> ar = Handle<Array>::Cast(args[1]);
       for (uint32_t i = 0; i < ar->Length(); i++) {
-        Handle<Value> el = ar->Get(i);
-        if (!el->IsUndefined() && el->IsObject()) {
-          Handle<Object> dirent = Handle<Object>::Cast(el);
-          Local<Value> prop = dirent->Get(String::NewSymbol("name"));
-          if (!prop->IsUndefined() && prop->IsString()) {
-            Local<String> name = Local<String>::Cast(prop);
-            String::AsciiValue av(name);
-            
-            struct stat st;
-            memset(&st, 0, sizeof(st));
-            st.st_ino = 0;
-            st.st_mode = 33261;
-            if (f4js_cmd.u.readdir.filler(f4js_cmd.u.readdir.buf, *av, &st, 0))
-              break;            
-          }
+        Local<Value> el = ar->Get(i);
+        if (!el->IsUndefined() && el->IsString()) {
+          Local<String> name = Local<String>::Cast(el);
+          String::AsciiValue av(name);          
+          struct stat st;
+          memset(&st, 0, sizeof(st));
+          st.st_ino = 0;
+          st.st_mode = 33261; // Octal 0100755 : file with 755 permissions
+          if (f4js_cmd.u.readdir.filler(f4js_cmd.u.readdir.buf, *av, &st, 0))
+            break;            
         }
       }
     }
