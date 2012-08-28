@@ -22,7 +22,12 @@
 #include <fuse.h>
 // #include <pthread.h>
 #include <semaphore.h>
-#include <math.h>
+//#include <math.h>
+#include <string>
+
+/*
+#include <vector>
+*/
 
 using namespace v8;
 
@@ -42,16 +47,24 @@ enum fuseop_t {
   OP_READDIR = 2
 };
 
+/*
+typedef struct {
+  std::string name;
+  mode_t mode;
+} file_name_and_mode_t;
+*/
+
 static struct {
   enum fuseop_t op;
   const char *in_path;
   union {
     struct {
-      struct stat *out_stbuf;
+      struct stat *stbuf;
     } getattr;
     struct {
-      const char *inout_buf;
-      fuse_fill_dir_t in_filler;
+      void *buf;
+      fuse_fill_dir_t filler;
+      // std::vector<std::string> dirents;
     } readdir;
   } u;
   int retval;
@@ -61,7 +74,7 @@ static int getattr(const char *path, struct stat *stbuf)
 {
   f4js_cmd.op = OP_GETATTR;
   f4js_cmd.in_path = path;
-  f4js_cmd.u.getattr.out_stbuf = stbuf;
+  f4js_cmd.u.getattr.stbuf = stbuf;
   uv_async_send(&f4js.async);
   sem_wait(&f4js.sem);
   return f4js_cmd.retval;
@@ -70,6 +83,15 @@ static int getattr(const char *path, struct stat *stbuf)
 static int readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		       off_t offset, struct fuse_file_info *fi)
 {
+  f4js_cmd.op = OP_READDIR;
+  f4js_cmd.in_path = path;
+  f4js_cmd.u.readdir.buf = buf;
+  f4js_cmd.u.readdir.filler = filler;
+  uv_async_send(&f4js.async);
+  sem_wait(&f4js.sem);  
+  return f4js_cmd.retval;
+  
+  /*
   DIR *dp;
   struct dirent *de;
   
@@ -90,6 +112,7 @@ static int readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   }
   
   closedir(dp);
+  */
   return 0;
 }
 
@@ -114,21 +137,55 @@ Handle<Value> GetAttrCb(const Arguments& args)
     Local<Number> retval = Local<Number>::Cast(args[0]);
     f4js_cmd.retval = (int)retval->Value();
     if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsObject()) {
-      memset(f4js_cmd.u.getattr.out_stbuf, 0, sizeof(*f4js_cmd.u.getattr.out_stbuf));
+      memset(f4js_cmd.u.getattr.stbuf, 0, sizeof(*f4js_cmd.u.getattr.stbuf));
       Handle<Object> stat = Handle<Object>::Cast(args[1]);
       
       Local<Value> prop = stat->Get(String::NewSymbol("st_size"));
       if (!prop->IsUndefined() && prop->IsNumber()) {
         Local<Number> num = Local<Number>::Cast(prop);
-        f4js_cmd.u.getattr.out_stbuf->st_size = (off_t)num->Value();
+        f4js_cmd.u.getattr.stbuf->st_size = (off_t)num->Value();
       }
       
       prop = stat->Get(String::NewSymbol("st_mode"));
       if (!prop->IsUndefined() && prop->IsNumber()) {
         Local<Number> num = Local<Number>::Cast(prop);
-        f4js_cmd.u.getattr.out_stbuf->st_mode = (mode_t)num->Value();
+        f4js_cmd.u.getattr.stbuf->st_mode = (mode_t)num->Value();
       }
       
+    }
+  }
+  sem_post(&f4js.sem);  
+  return scope.Close(Undefined());    
+}
+
+// ---------------------------------------------------------------------------
+
+Handle<Value> ReadDirCb(const Arguments& args)
+{
+  HandleScope scope;
+  if (args.Length() >= 1 && args[0]->IsNumber()) {
+    Local<Number> retval = Local<Number>::Cast(args[0]);
+    f4js_cmd.retval = (int)retval->Value();
+    if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsArray()) {
+      Handle<Array> ar = Handle<Array>::Cast(args[1]);
+      for (uint32_t i = 0; i < ar->Length(); i++) {
+        Handle<Value> el = ar->Get(i);
+        if (!el->IsUndefined() && el->IsObject()) {
+          Handle<Object> dirent = Handle<Object>::Cast(el);
+          Local<Value> prop = dirent->Get(String::NewSymbol("name"));
+          if (!prop->IsUndefined() && prop->IsString()) {
+            Local<String> name = Local<String>::Cast(prop);
+            String::AsciiValue av(name);
+            
+            struct stat st;
+            memset(&st, 0, sizeof(st));
+            st.st_ino = 0;
+            st.st_mode = 33261;
+            if (f4js_cmd.u.readdir.filler(f4js_cmd.u.readdir.buf, *av, &st, 0))
+              break;            
+          }
+        }
+      }
     }
   }
   sem_post(&f4js.sem);  
@@ -140,32 +197,43 @@ Handle<Value> GetAttrCb(const Arguments& args)
 // Called from the main thread.
 static void F4jsAsyncCb(uv_async_t* handle, int status) {
   HandleScope scope;
+  std::string symName;
+  Local<FunctionTemplate> tpl;
   f4js_cmd.retval = -EINVAL;
   
   switch (f4js_cmd.op) {
   case OP_EXIT:
     pthread_join(f4js.fuse_thread, NULL);
     uv_unref((uv_handle_t*) &f4js.async);
-    break;
+    return;
     
-  case OP_GETATTR: {
-    Local<Function> handler = Local<Function>::Cast(f4js.handlers->Get(String::NewSymbol("getattr")));
-    if (handler.IsEmpty()) {
-      sem_post(&f4js.sem);
-      break;
-    }
-    Local<FunctionTemplate> tpl = FunctionTemplate::New(GetAttrCb);
-    Local<Function> cb = tpl->GetFunction();
-    cb->SetName(String::NewSymbol("getattrCb"));
-    Local<String> path = String::New(f4js_cmd.in_path);
-    Local<Value> argv[] = { path, cb };
-    handler->Call(Context::GetCurrent()->Global(), 2, argv);
+  case OP_GETATTR:
+    symName = "getattr";
+    tpl = FunctionTemplate::New(GetAttrCb);
     break;
-  }
+  
+  case OP_READDIR:
+    symName = "readdir";
+    tpl = FunctionTemplate::New(ReadDirCb);
+    break;
   
   default:
-    break;
+    sem_post(&f4js.sem);
+    return;
   }
+  
+  Local<Function> handler = Local<Function>::Cast(f4js.handlers->Get(String::NewSymbol(symName.c_str())));
+  if (handler->IsUndefined()) {
+    sem_post(&f4js.sem);
+    return;
+  }
+  
+  Local<Function> cb = tpl->GetFunction();
+  std::string cbName = symName + "Cb";
+  cb->SetName(String::NewSymbol(cbName.c_str()));
+  Local<String> path = String::New(f4js_cmd.in_path);
+  Local<Value> argv[] = { path, cb };
+  handler->Call(Context::GetCurrent()->Global(), 2, argv);  
 }
 
 Handle<Value> Method(const Arguments& args) {

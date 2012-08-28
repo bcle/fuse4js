@@ -23,7 +23,7 @@ var obj = {
  *     and stat is the result in the form of a stat structure (when err === 0)
  */
 var getattr = function (path, cb) {	
-  cb( 0,                   // err
+  cb( 0,                   // success
       { st_size: 500,      // size in bytes
         st_mode: 16877     // 040755 in octal
       }
@@ -35,10 +35,14 @@ var getattr = function (path, cb) {
  * path: the path to the file
  * cb: a callback of the form cb(err, dirents), where err is the Posix return code
  *     and dirents is the result in the form of an array of directory entry objects
- *     (when err === 0)
+ *     (when err === 0). Each directory entry object must have two fields: name, and st_mode
  */
 var readdir = function (path, cb) {
-  return 0;	
+  cb( 0,
+      [ { name: 'hello.txt', st_mode: 33261},
+        { name: 'dir1',      st_mode: 16877}
+      ]
+  );
 }
 
 var handlers = {
