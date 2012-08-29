@@ -1,4 +1,5 @@
 #include <node.h>
+#include <node_buffer.h>
 #include <v8.h>
 
 #define FUSE_USE_VERSION 26
@@ -32,13 +33,17 @@ static struct {
   sem_t sem;
   pthread_t fuse_thread;
   char root[256];
-  Persistent<Object> handlers; 
+  Persistent<Object> handlers;
+  Persistent<Object> nodeBuffer;  
 } f4js;
 
 enum fuseop_t {  
   OP_EXIT = 0,
   OP_GETATTR = 1,
-  OP_READDIR = 2
+  OP_READDIR = 2,
+  OP_OPEN = 3,
+  OP_READ = 4,
+  OP_WRITE = 5
 };
 
 static struct {
@@ -52,6 +57,11 @@ static struct {
       void *buf;
       fuse_fill_dir_t filler;
     } readdir;
+    struct {
+      off_t offset;
+      size_t len;
+      char *buf;
+    } rw;
   } u;
   int retval;
 } f4js_cmd;
@@ -84,11 +94,42 @@ static int readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 // ---------------------------------------------------------------------------
 
+int open(const char *path, struct fuse_file_info *)
+{
+  f4js_cmd.op = OP_OPEN;
+  f4js_cmd.in_path = path;
+  uv_async_send(&f4js.async);
+  sem_wait(&f4js.sem);  
+  return f4js_cmd.retval;   
+}
+
+// ---------------------------------------------------------------------------
+
+int read (const char *path,
+          char *buf,
+          size_t len,
+          off_t offset,
+          struct fuse_file_info *)
+{
+  f4js_cmd.op = OP_READ;
+  f4js_cmd.in_path = path;
+  f4js_cmd.u.rw.offset = offset;
+  f4js_cmd.u.rw.len = len;
+  f4js_cmd.u.rw.buf = buf;
+  uv_async_send(&f4js.async);
+  sem_wait(&f4js.sem); 
+  return f4js_cmd.retval;   
+}
+
+// ---------------------------------------------------------------------------
+
 void *fuse_thread(void *)
 {
   struct fuse_operations oper = { 0 };
   oper.getattr = getattr;
   oper.readdir = readdir;
+  oper.open = open;
+  oper.read = read;
   char *argv[] = { "dummy", "-s", "-d", f4js.root };
   fuse_main(4, argv, &oper, NULL);
   f4js_cmd.op = OP_EXIT;
@@ -98,7 +139,7 @@ void *fuse_thread(void *)
 
 // ---------------------------------------------------------------------------
 
-Handle<Value> GetAttrCb(const Arguments& args)
+Handle<Value> GetAttrCompletion(const Arguments& args)
 {
   HandleScope scope;
   if (args.Length() >= 1 && args[0]->IsNumber()) {
@@ -128,7 +169,7 @@ Handle<Value> GetAttrCb(const Arguments& args)
 
 // ---------------------------------------------------------------------------
 
-Handle<Value> ReadDirCb(const Arguments& args)
+Handle<Value> ReadDirCompletion(const Arguments& args)
 {
   HandleScope scope;
   if (args.Length() >= 1 && args[0]->IsNumber()) {
@@ -155,12 +196,71 @@ Handle<Value> ReadDirCb(const Arguments& args)
 
 // ---------------------------------------------------------------------------
 
+Handle<Value> OpenCompletion(const Arguments& args)
+{
+  HandleScope scope;
+  if (args.Length() >= 1 && args[0]->IsNumber()) {
+    Local<Number> retval = Local<Number>::Cast(args[0]);
+    f4js_cmd.retval = (int)retval->Value();    
+  }
+  sem_post(&f4js.sem);  
+  return scope.Close(Undefined());    
+}
+
+// ---------------------------------------------------------------------------
+
+Handle<Value> ReadCompletion(const Arguments& args)
+{
+  HandleScope scope;
+  if (args.Length() >= 1 && args[0]->IsNumber()) {
+    Local<Number> retval = Local<Number>::Cast(args[0]);
+    f4js_cmd.retval = (int)retval->Value();
+    if (f4js_cmd.retval >= 0) {
+      char *buffer_data = node::Buffer::Data(f4js.nodeBuffer);
+      if ((size_t)f4js_cmd.retval > f4js_cmd.u.rw.len) {
+        f4js_cmd.retval = f4js_cmd.u.rw.len;
+      }
+      memcpy(f4js_cmd.u.rw.buf, buffer_data, f4js_cmd.retval);
+    }
+  }
+  f4js.nodeBuffer.Dispose();
+  sem_post(&f4js.sem);  
+  return scope.Close(Undefined());    
+}
+
+// ---------------------------------------------------------------------------
+
+static void DispatchRead()
+{
+  Local<FunctionTemplate> tpl = FunctionTemplate::New(ReadCompletion);
+  Local<Function> handler = Local<Function>::Cast(f4js.handlers->Get(String::NewSymbol("read")));
+  if (handler->IsUndefined()) {
+    sem_post(&f4js.sem);
+    return;
+  }
+  Local<Function> cb = tpl->GetFunction();
+  cb->SetName(String::NewSymbol("readCompletion"));
+  Local<String> path = String::New(f4js_cmd.in_path);
+  
+  node::Buffer* buffer = node::Buffer::New(f4js_cmd.u.rw.len);
+  f4js.nodeBuffer = Persistent<Object>::New(buffer->handle_); 
+  
+  // FIXME: large 64-bit file offsets cannot be precisely stored in a JS number 
+  Local<Number> offset = Number::New((double)f4js_cmd.u.rw.offset);
+  
+  Local<Number> len = Number::New((double)f4js_cmd.u.rw.len);
+  Handle<Value> argv[] = { path, offset, len, f4js.nodeBuffer, cb };
+  handler->Call(Context::GetCurrent()->Global(), 5, argv);  
+}
+
+// ---------------------------------------------------------------------------
+
 // Called from the main thread.
-static void F4jsAsyncCb(uv_async_t* handle, int status) {
+static void DispatchOp(uv_async_t* handle, int status) {
   HandleScope scope;
   std::string symName;
   Local<FunctionTemplate> tpl;
-  f4js_cmd.retval = -EINVAL;
+  f4js_cmd.retval = -EPERM;
   
   switch (f4js_cmd.op) {
   case OP_EXIT:
@@ -170,14 +270,23 @@ static void F4jsAsyncCb(uv_async_t* handle, int status) {
     
   case OP_GETATTR:
     symName = "getattr";
-    tpl = FunctionTemplate::New(GetAttrCb);
+    tpl = FunctionTemplate::New(GetAttrCompletion);
     break;
   
   case OP_READDIR:
     symName = "readdir";
-    tpl = FunctionTemplate::New(ReadDirCb);
+    tpl = FunctionTemplate::New(ReadDirCompletion);
     break;
   
+  case OP_OPEN:
+    symName = "open";
+    tpl = FunctionTemplate::New(OpenCompletion);
+    break;
+
+  case OP_READ:
+    DispatchRead();
+    return;
+    
   default:
     sem_post(&f4js.sem);
     return;
@@ -190,7 +299,7 @@ static void F4jsAsyncCb(uv_async_t* handle, int status) {
   }
   
   Local<Function> cb = tpl->GetFunction();
-  std::string cbName = symName + "Cb";
+  std::string cbName = symName + "Completion";
   cb->SetName(String::NewSymbol(cbName.c_str()));
   Local<String> path = String::New(f4js_cmd.in_path);
   Local<Value> argv[] = { path, cb };
@@ -222,7 +331,7 @@ Handle<Value> Start(const Arguments& args) {
   f4js.handlers = Persistent<Object>::New(Local<Object>::Cast(args[1]));
 
   sem_init(&f4js.sem, 0, 0);
-  uv_async_init(uv_default_loop(), &f4js.async, F4jsAsyncCb);
+  uv_async_init(uv_default_loop(), &f4js.async, DispatchOp);
 
   pthread_attr_t attr;
   pthread_attr_init(&attr);

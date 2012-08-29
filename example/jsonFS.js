@@ -98,9 +98,69 @@ var readdir = function (path, cb) {
   cb( err, names );
 }
 
+/*
+ * Handler for the open() system call.
+ * path: the path to the file
+ * cb: a callback of the form cb(err), where err is the Posix return code
+ */
+var open = function (path, cb) {
+  var err = 0; // assume success
+  var node = lookup(obj, path);
+  
+  if (typeof node === 'undefined') {
+    err = -ENOENT;
+  }
+  cb(err);
+}
+
+/*
+ * Handler for the read() system call.
+ * path: the path to the file
+ * offset: the file offset to read from
+ * len: the number of bytes to read
+ * buf: the Buffer to write to
+ * cb: a callback of the form cb(err), where err is the Posix return code.
+ *     A positive value represents the number of bytes read.
+ */
+var read = function (path, offset, len, buf, cb) {
+  var err = 0; // assume success
+  var file = lookup(obj, path);
+  var maxBytes;
+  var data;
+  
+  switch (typeof file) {
+  case 'undefined':
+    err = -2; // -ENOENT
+    break;
+
+  case 'object': // directory
+    err = -1; // -EPERM
+    break;
+      
+  case 'string': // a string treated as ASCII characters
+    if (offset < file.length) {
+      maxBytes = file.length - offset;
+      if (len > maxBytes) {
+        len = maxBytes;
+      }
+      data = file.substring(offset, len);
+      buf.write(data, 0, len, 'ascii');
+      err = len;
+    }
+    break;
+  
+  default:
+    break;
+  }
+  cb(err);
+}
+
+
 var handlers = {
   getattr: getattr,
-  readdir: readdir
+  readdir: readdir,
+  open: open,
+  read: read
 };
 
 f4js.start("/devel/mnt", handlers);
