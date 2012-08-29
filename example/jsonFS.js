@@ -19,19 +19,21 @@ var obj = {
  * the sub-object corresponding to the specified path
  */
 function lookup(root, path) {
+  var cur = null, previous = null, name = '';
   if (path === '/') {
-    return root;
+    return { node:root, parent:null, name:'' };
   }
   comps = path.split('/');
-  var cur = null;
   for (i = 0; i < comps.length; ++i) {
+    previous = cur;
     if (i == 0) {
       cur = root;
     } else if (cur !== undefined ){
-      cur = cur[comps[i]];
+      name = comps[i];
+      cur = cur[name];
     }
   }
-  return cur;
+  return {node:cur, parent:previous, name:name};
 }
 
 /*
@@ -43,7 +45,8 @@ function lookup(root, path) {
 var getattr = function (path, cb) {	
   var stat = {};
   var err = 0; // assume success
-  var node = lookup(obj, path);
+  var info = lookup(obj, path);
+  var node = info.node;
 
   switch (typeof node) {
   case 'undefined':
@@ -75,9 +78,9 @@ var getattr = function (path, cb) {
 var readdir = function (path, cb) {
   var names = [];
   var err = 0; // assume success
-  var node = lookup(obj, path);
+  var info = lookup(obj, path);
 
-  switch (typeof node) {
+  switch (typeof info.node) {
   case 'undefined':
     err = -2; // -ENOENT
     break;
@@ -88,7 +91,7 @@ var readdir = function (path, cb) {
   
   case 'object': // directory
     var i = 0;
-    for (key in node)
+    for (key in info.node)
       names[i++] = key;
     break;
     
@@ -105,9 +108,9 @@ var readdir = function (path, cb) {
  */
 var open = function (path, cb) {
   var err = 0; // assume success
-  var node = lookup(obj, path);
+  var info = lookup(obj, path);
   
-  if (typeof node === 'undefined') {
+  if (typeof info.node === 'undefined') {
     err = -ENOENT;
   }
   cb(err);
@@ -118,13 +121,14 @@ var open = function (path, cb) {
  * path: the path to the file
  * offset: the file offset to read from
  * len: the number of bytes to read
- * buf: the Buffer to write to
+ * buf: the Buffer to write the data to
  * cb: a callback of the form cb(err), where err is the Posix return code.
  *     A positive value represents the number of bytes read.
  */
 var read = function (path, offset, len, buf, cb) {
   var err = 0; // assume success
-  var file = lookup(obj, path);
+  var info = lookup(obj, path);
+  var file = info.node;
   var maxBytes;
   var data;
   
@@ -155,12 +159,62 @@ var read = function (path, offset, len, buf, cb) {
   cb(err);
 }
 
+/*
+ * Handler for the write() system call.
+ * path: the path to the file
+ * offset: the file offset to write to
+ * len: the number of bytes to write
+ * buf: the Buffer to read data from
+ * cb: a callback of the form cb(err), where err is the Posix return code.
+ *     A positive value represents the number of bytes written.
+ */
+var write = function (path, offset, len, buf, cb) {
+  var err = 0; // assume success
+  var info = lookup(obj, path);
+  var file = info.node;
+  var name = info.name;
+  var parent = info.parent;
+  var beginning, blank = '', data, ending='', numBlankChars;
+  
+  switch (typeof file) {
+  case 'undefined':
+    err = -2; // -ENOENT
+    break;
+
+  case 'object': // directory
+    err = -1; // -EPERM
+    break;
+      
+  case 'string': // a string treated as ASCII characters
+    data = buf.toString('ascii'); // read the new data
+    if (offset < file.length) {
+      beginning = file.substring(0, offset);
+      if (offset + data.length < file.length) {
+        ending = file.substring(offset + data.length, file.length)
+      }
+    } else {
+      beginning = file;
+      numBlankChars = offset - file.length;
+      console.log("numBlankChars = " + numBlankChars);
+      while (numBlankChars--) blank += ' ';
+    }
+    delete parent[name];
+    parent[name] = beginning + blank + data + ending;
+    err = data.length;
+    break;
+  
+  default:
+    break;
+  }
+  cb(err);
+}
 
 var handlers = {
   getattr: getattr,
   readdir: readdir,
   open: open,
-  read: read
+  read: read,
+  write: write
 };
 
 f4js.start("/devel/mnt", handlers);

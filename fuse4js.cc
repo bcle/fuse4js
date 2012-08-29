@@ -60,7 +60,8 @@ static struct {
     struct {
       off_t offset;
       size_t len;
-      char *buf;
+      char *dstBuf;
+      const char *srcBuf; 
     } rw;
   } u;
   int retval;
@@ -115,7 +116,25 @@ int read (const char *path,
   f4js_cmd.in_path = path;
   f4js_cmd.u.rw.offset = offset;
   f4js_cmd.u.rw.len = len;
-  f4js_cmd.u.rw.buf = buf;
+  f4js_cmd.u.rw.dstBuf = buf;
+  uv_async_send(&f4js.async);
+  sem_wait(&f4js.sem); 
+  return f4js_cmd.retval;   
+}
+
+// ---------------------------------------------------------------------------
+
+int write (const char *path,
+          const char *buf,
+          size_t len,
+          off_t offset,
+          struct fuse_file_info *)
+{
+  f4js_cmd.op = OP_WRITE;
+  f4js_cmd.in_path = path;
+  f4js_cmd.u.rw.offset = offset;
+  f4js_cmd.u.rw.len = len;
+  f4js_cmd.u.rw.srcBuf = buf;
   uv_async_send(&f4js.async);
   sem_wait(&f4js.sem); 
   return f4js_cmd.retval;   
@@ -125,13 +144,14 @@ int read (const char *path,
 
 void *fuse_thread(void *)
 {
-  struct fuse_operations oper = { 0 };
-  oper.getattr = getattr;
-  oper.readdir = readdir;
-  oper.open = open;
-  oper.read = read;
+  struct fuse_operations ops = { 0 };
+  ops.getattr = getattr;
+  ops.readdir = readdir;
+  ops.open = open;
+  ops.read = read;
+  ops.write = write;
   char *argv[] = { "dummy", "-s", "-d", f4js.root };
-  fuse_main(4, argv, &oper, NULL);
+  fuse_main(4, argv, &ops, NULL);
   f4js_cmd.op = OP_EXIT;
   uv_async_send(&f4js.async);
   return NULL;
@@ -220,7 +240,7 @@ Handle<Value> ReadCompletion(const Arguments& args)
       if ((size_t)f4js_cmd.retval > f4js_cmd.u.rw.len) {
         f4js_cmd.retval = f4js_cmd.u.rw.len;
       }
-      memcpy(f4js_cmd.u.rw.buf, buffer_data, f4js_cmd.retval);
+      memcpy(f4js_cmd.u.rw.dstBuf, buffer_data, f4js_cmd.retval);
     }
   }
   f4js.nodeBuffer.Dispose();
@@ -243,6 +263,45 @@ static void DispatchRead()
   Local<String> path = String::New(f4js_cmd.in_path);
   
   node::Buffer* buffer = node::Buffer::New(f4js_cmd.u.rw.len);
+  f4js.nodeBuffer = Persistent<Object>::New(buffer->handle_); 
+  
+  // FIXME: large 64-bit file offsets cannot be precisely stored in a JS number 
+  Local<Number> offset = Number::New((double)f4js_cmd.u.rw.offset);
+  
+  Local<Number> len = Number::New((double)f4js_cmd.u.rw.len);
+  Handle<Value> argv[] = { path, offset, len, f4js.nodeBuffer, cb };
+  handler->Call(Context::GetCurrent()->Global(), 5, argv);  
+}
+
+// ---------------------------------------------------------------------------
+
+Handle<Value> WriteCompletion(const Arguments& args)
+{
+  HandleScope scope;
+  if (args.Length() >= 1 && args[0]->IsNumber()) {
+    Local<Number> retval = Local<Number>::Cast(args[0]);
+    f4js_cmd.retval = (int)retval->Value();
+  }
+  f4js.nodeBuffer.Dispose();
+  sem_post(&f4js.sem);  
+  return scope.Close(Undefined());    
+}
+
+// ---------------------------------------------------------------------------
+
+static void DispatchWrite()
+{
+  Local<FunctionTemplate> tpl = FunctionTemplate::New(WriteCompletion);
+  Local<Function> handler = Local<Function>::Cast(f4js.handlers->Get(String::NewSymbol("write")));
+  if (handler->IsUndefined()) {
+    sem_post(&f4js.sem);
+    return;
+  }
+  Local<Function> cb = tpl->GetFunction();
+  cb->SetName(String::NewSymbol("writeCompletion"));
+  Local<String> path = String::New(f4js_cmd.in_path);
+  
+  node::Buffer* buffer = node::Buffer::New((char*)f4js_cmd.u.rw.srcBuf, f4js_cmd.u.rw.len);
   f4js.nodeBuffer = Persistent<Object>::New(buffer->handle_); 
   
   // FIXME: large 64-bit file offsets cannot be precisely stored in a JS number 
@@ -285,6 +344,10 @@ static void DispatchOp(uv_async_t* handle, int status) {
 
   case OP_READ:
     DispatchRead();
+    return;
+    
+  case OP_WRITE:
+    DispatchWrite();
     return;
     
   default:
