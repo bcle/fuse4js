@@ -14,6 +14,8 @@ var obj = {
   'goodbye.txt': "Goodbye\n"
 };
 
+//---------------------------------------------------------------------------
+
 /*
  * Given the name space represented by the object 'root', locate
  * the sub-object corresponding to the specified path
@@ -38,6 +40,8 @@ function lookup(root, path) {
   }
   return {node:cur, parent:previous, name:name};
 }
+
+//---------------------------------------------------------------------------
 
 /*
  * Handler for the getattr() system call.
@@ -72,6 +76,8 @@ var getattr = function (path, cb) {
   cb( err, stat );
 };
 
+//---------------------------------------------------------------------------
+
 /*
  * Handler for the readdir() system call.
  * path: the path to the file
@@ -104,6 +110,8 @@ var readdir = function (path, cb) {
   cb( err, names );
 }
 
+//---------------------------------------------------------------------------
+
 /*
  * Handler for the open() system call.
  * path: the path to the file
@@ -118,6 +126,8 @@ var open = function (path, cb) {
   }
   cb(err);
 }
+
+//---------------------------------------------------------------------------
 
 /*
  * Handler for the read() system call.
@@ -161,6 +171,8 @@ var read = function (path, offset, len, buf, cb) {
   }
   cb(err);
 }
+
+//---------------------------------------------------------------------------
 
 /*
  * Handler for the write() system call.
@@ -212,6 +224,8 @@ var write = function (path, offset, len, buf, cb) {
   cb(err);
 }
 
+//---------------------------------------------------------------------------
+
 /*
  * Handler for the create() system call.
  * path: the path to the file
@@ -241,6 +255,8 @@ var create = function (path, cb) {
   cb(err);
 }
 
+//---------------------------------------------------------------------------
+
 /*
  * Handler for the unlink() system call.
  * path: the path to the file
@@ -269,6 +285,8 @@ var unlink = function (path, cb) {
   cb(err);
 }
 
+//---------------------------------------------------------------------------
+
 /*
  * Handler for the rename() system call.
  * src: the path of the file to rename
@@ -292,6 +310,42 @@ var rename = function (src, dst, cb) {
   cb(err);
 }
 
+//---------------------------------------------------------------------------
+
+/*
+ * Handler for the mkdir() system call.
+ * path: the path of the new directory
+ * cb: a callback of the form cb(err), where err is the Posix return code.
+ */
+var mkdir = function (path, cb) {
+  var err = -2; // -ENOENT assume failure
+  var dst = lookup(obj, path), dest;
+  if (typeof dst.node === 'undefined' && dst.parent != null) {
+    dst.parent[dst.name] = {};
+    err = 0;
+  }
+  cb(err);
+}
+
+//---------------------------------------------------------------------------
+
+/*
+ * Handler for the rmdir() system call.
+ * path: the path of the directory to remove
+ * cb: a callback of the form cb(err), where err is the Posix return code.
+ */
+var rmdir = function (path, cb) {
+  var err = -2; // -ENOENT assume failure
+  var dst = lookup(obj, path), dest;
+  if (typeof dst.node === 'object' && dst.parent != null) {
+    delete dst.parent[dst.name];
+    err = 0;
+  }
+  cb(err);
+}
+
+//---------------------------------------------------------------------------
+
 var handlers = {
   getattr: getattr,
   readdir: readdir,
@@ -300,7 +354,9 @@ var handlers = {
   write: write,
   create: create,
   unlink: unlink,
-  rename: rename
+  rename: rename,
+  mkdir: mkdir,
+  rmdir: rmdir
 };
 
 f4js.start("/devel/mnt", handlers);

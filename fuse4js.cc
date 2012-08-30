@@ -46,7 +46,23 @@ enum fuseop_t {
   OP_WRITE = 5,
   OP_CREATE = 6,
   OP_UNLINK = 7,
-  OP_RENAME = 8
+  OP_RENAME = 8,
+  OP_MKDIR = 9,
+  OP_RMDIR = 10
+};
+
+const char* fuseop_names[] = {
+    "exit",
+    "getattr",
+    "readdir",
+    "open",
+    "read",
+    "write",
+    "create",
+    "unlink",
+    "rename",
+    "mkdir",
+    "rmdir"
 };
 
 static struct {
@@ -75,14 +91,21 @@ static struct {
 
 // ---------------------------------------------------------------------------
 
-static int f4js_getattr(const char *path, struct stat *stbuf)
+static int f4js_rpc(enum fuseop_t op, const char *path)
 {
-  f4js_cmd.op = OP_GETATTR;
+  f4js_cmd.op = op;
   f4js_cmd.in_path = path;
-  f4js_cmd.u.getattr.stbuf = stbuf;
   uv_async_send(&f4js.async);
   sem_wait(&f4js.sem);
-  return f4js_cmd.retval;
+  return f4js_cmd.retval;  
+}
+
+// ---------------------------------------------------------------------------
+
+static int f4js_getattr(const char *path, struct stat *stbuf)
+{
+  f4js_cmd.u.getattr.stbuf = stbuf;
+  return f4js_rpc(OP_GETATTR, path);
 }
 
 // ---------------------------------------------------------------------------
@@ -90,24 +113,16 @@ static int f4js_getattr(const char *path, struct stat *stbuf)
 static int f4js_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		         off_t offset, struct fuse_file_info *fi)
 {
-  f4js_cmd.op = OP_READDIR;
-  f4js_cmd.in_path = path;
   f4js_cmd.u.readdir.buf = buf;
   f4js_cmd.u.readdir.filler = filler;
-  uv_async_send(&f4js.async);
-  sem_wait(&f4js.sem);  
-  return f4js_cmd.retval;  
+  return f4js_rpc(OP_READDIR, path);
 }
 
 // ---------------------------------------------------------------------------
 
 int f4js_open(const char *path, struct fuse_file_info *)
 {
-  f4js_cmd.op = OP_OPEN;
-  f4js_cmd.in_path = path;
-  uv_async_send(&f4js.async);
-  sem_wait(&f4js.sem);  
-  return f4js_cmd.retval;   
+  return f4js_rpc(OP_OPEN, path);
 }
 
 // ---------------------------------------------------------------------------
@@ -118,14 +133,10 @@ int f4js_read (const char *path,
                off_t offset,
                struct fuse_file_info *)
 {
-  f4js_cmd.op = OP_READ;
-  f4js_cmd.in_path = path;
   f4js_cmd.u.rw.offset = offset;
   f4js_cmd.u.rw.len = len;
   f4js_cmd.u.rw.dstBuf = buf;
-  uv_async_send(&f4js.async);
-  sem_wait(&f4js.sem); 
-  return f4js_cmd.retval;   
+  return f4js_rpc(OP_READ, path);
 }
 
 // ---------------------------------------------------------------------------
@@ -136,14 +147,10 @@ int f4js_write (const char *path,
                 off_t offset,
                 struct fuse_file_info *)
 {
-  f4js_cmd.op = OP_WRITE;
-  f4js_cmd.in_path = path;
   f4js_cmd.u.rw.offset = offset;
   f4js_cmd.u.rw.len = len;
   f4js_cmd.u.rw.srcBuf = buf;
-  uv_async_send(&f4js.async);
-  sem_wait(&f4js.sem); 
-  return f4js_cmd.retval;   
+  return f4js_rpc(OP_WRITE, path);
 }
 
 // ---------------------------------------------------------------------------
@@ -152,11 +159,7 @@ int f4js_create (const char *path,
                  mode_t mode,
                  struct fuse_file_info *)
 {
-  f4js_cmd.op = OP_CREATE;
-  f4js_cmd.in_path = path;
-  uv_async_send(&f4js.async);
-  sem_wait(&f4js.sem);  
-  return f4js_cmd.retval;   
+  return f4js_rpc(OP_CREATE, path);
 }
 
 // ---------------------------------------------------------------------------
@@ -171,23 +174,30 @@ int f4js_utimens (const char *,
 
 int f4js_unlink (const char *path)
 {
-  f4js_cmd.op = OP_UNLINK;
-  f4js_cmd.in_path = path;
-  uv_async_send(&f4js.async);
-  sem_wait(&f4js.sem);  
-  return f4js_cmd.retval;   
+  return f4js_rpc(OP_UNLINK, path);
 }
 
 // ---------------------------------------------------------------------------
 
 int f4js_rename (const char *src, const char *dst)
 {
-  f4js_cmd.op = OP_RENAME;
-  f4js_cmd.in_path = src;
   f4js_cmd.u.rename.dst = dst;
-  uv_async_send(&f4js.async);
-  sem_wait(&f4js.sem);  
-  return f4js_cmd.retval;   
+  return f4js_rpc(OP_RENAME, src);
+}
+
+// ---------------------------------------------------------------------------
+
+int f4js_mkdir (const char *path, mode_t mode)
+{
+  // TODO: pass 'mode'
+  return f4js_rpc(OP_MKDIR, path);
+}
+
+// ---------------------------------------------------------------------------
+
+int f4js_rmdir (const char *path)
+{
+  return f4js_rpc(OP_RMDIR, path);
 }
 
 // ---------------------------------------------------------------------------
@@ -204,6 +214,8 @@ void *fuse_thread(void *)
   ops.utimens = f4js_utimens;
   ops.unlink = f4js_unlink;
   ops.rename = f4js_rename;
+  ops.mkdir = f4js_mkdir;
+  ops.rmdir = f4js_rmdir;
   char *argv[] = { "dummy", "-s", "-d", f4js.root };
   fuse_main(4, argv, &ops, NULL);
   f4js_cmd.op = OP_EXIT;
@@ -234,7 +246,6 @@ Handle<Value> GetAttrCompletion(const Arguments& args)
         Local<Number> num = Local<Number>::Cast(prop);
         f4js_cmd.u.getattr.stbuf->st_mode = (mode_t)num->Value();
       }
-      
     }
   }
   sem_post(&f4js.sem);  
@@ -369,14 +380,14 @@ static void DispatchWrite()
 // ---------------------------------------------------------------------------
 
 // Called from the main thread.
-static void DispatchOp(uv_async_t* handle, int status) {
+static void DispatchOp(uv_async_t* handle, int status)
+{
   HandleScope scope;
-  std::string symName;
+  std::string symName(fuseop_names[f4js_cmd.op]);
   Local<FunctionTemplate> tpl = FunctionTemplate::New(GenericCompletion); // default
   f4js_cmd.retval = -EPERM;
   int argc = 0;
-  Local<Value> argv[5];
-  
+  Local<Value> argv[5];  
   Local<String> path = String::New(f4js_cmd.in_path);  
   argv[argc++] = path;
   
@@ -387,29 +398,14 @@ static void DispatchOp(uv_async_t* handle, int status) {
     return;
     
   case OP_GETATTR:
-    symName = "getattr";
     tpl = FunctionTemplate::New(GetAttrCompletion);
     break;
   
   case OP_READDIR:
-    symName = "readdir";
     tpl = FunctionTemplate::New(ReadDirCompletion);
     break;
   
-  case OP_OPEN:
-    symName = "open";
-    break;
-
-  case OP_CREATE:
-    symName = "create";
-    break;
-
-  case OP_UNLINK:
-    symName = "unlink";
-    break;
-    
   case OP_RENAME:
-    symName = "rename";
     argv[argc++] = String::New(f4js_cmd.u.rename.dst);
     break;
 
@@ -422,8 +418,7 @@ static void DispatchOp(uv_async_t* handle, int status) {
     return;
     
   default:
-    sem_post(&f4js.sem);
-    return;
+    break;
   }
   
   Local<Function> handler = Local<Function>::Cast(f4js.handlers->Get(String::NewSymbol(symName.c_str())));
@@ -441,24 +436,24 @@ static void DispatchOp(uv_async_t* handle, int status) {
 
 // ---------------------------------------------------------------------------
 
-Handle<Value> Start(const Arguments& args) {
+Handle<Value> Start(const Arguments& args)
+{
   HandleScope scope;
-
   if (args.Length() < 2) {
     ThrowException(Exception::TypeError(String::New("Wrong number of arguments")));
-      return scope.Close(Undefined());
+    return scope.Close(Undefined());
   }
 
   if (!args[0]->IsString() || !args[1]->IsObject()) {
     ThrowException(Exception::TypeError(String::New("Wrong argument types")));
-      return scope.Close(Undefined());
+    return scope.Close(Undefined());
   }
 
   String::AsciiValue av(args[0]);
   char *root = *av;
   if (root == NULL) {
     ThrowException(Exception::TypeError(String::New("Path is incorrect")));
-      return scope.Close(Undefined());
+    return scope.Close(Undefined());
   }
   strncpy(f4js.root, root, sizeof(f4js.root));
   f4js.handlers = Persistent<Object>::New(Local<Object>::Cast(args[1]));
@@ -474,7 +469,8 @@ Handle<Value> Start(const Arguments& args) {
 
 // ---------------------------------------------------------------------------
 
-void init(Handle<Object> target) {
+void init(Handle<Object> target)
+{
   target->Set(String::NewSymbol("start"), FunctionTemplate::New(Start)->GetFunction());
 }
 
