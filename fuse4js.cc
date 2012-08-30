@@ -44,7 +44,8 @@ enum fuseop_t {
   OP_OPEN = 3,
   OP_READ = 4,
   OP_WRITE = 5,
-  OP_CREATE = 6
+  OP_CREATE = 6,
+  OP_UNLINK = 7
 };
 
 static struct {
@@ -70,7 +71,7 @@ static struct {
 
 // ---------------------------------------------------------------------------
 
-static int getattr(const char *path, struct stat *stbuf)
+static int f4js_getattr(const char *path, struct stat *stbuf)
 {
   f4js_cmd.op = OP_GETATTR;
   f4js_cmd.in_path = path;
@@ -82,8 +83,8 @@ static int getattr(const char *path, struct stat *stbuf)
 
 // ---------------------------------------------------------------------------
 
-static int readdir(const char *path, void *buf, fuse_fill_dir_t filler,
-		       off_t offset, struct fuse_file_info *fi)
+static int f4js_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
+		         off_t offset, struct fuse_file_info *fi)
 {
   f4js_cmd.op = OP_READDIR;
   f4js_cmd.in_path = path;
@@ -96,7 +97,7 @@ static int readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 // ---------------------------------------------------------------------------
 
-int open(const char *path, struct fuse_file_info *)
+int f4js_open(const char *path, struct fuse_file_info *)
 {
   f4js_cmd.op = OP_OPEN;
   f4js_cmd.in_path = path;
@@ -107,11 +108,11 @@ int open(const char *path, struct fuse_file_info *)
 
 // ---------------------------------------------------------------------------
 
-int read (const char *path,
-          char *buf,
-          size_t len,
-          off_t offset,
-          struct fuse_file_info *)
+int f4js_read (const char *path,
+               char *buf,
+               size_t len,
+               off_t offset,
+               struct fuse_file_info *)
 {
   f4js_cmd.op = OP_READ;
   f4js_cmd.in_path = path;
@@ -125,11 +126,11 @@ int read (const char *path,
 
 // ---------------------------------------------------------------------------
 
-int write (const char *path,
-          const char *buf,
-          size_t len,
-          off_t offset,
-          struct fuse_file_info *)
+int f4js_write (const char *path,
+                const char *buf,
+                size_t len,
+                off_t offset,
+                struct fuse_file_info *)
 {
   f4js_cmd.op = OP_WRITE;
   f4js_cmd.in_path = path;
@@ -143,9 +144,9 @@ int write (const char *path,
 
 // ---------------------------------------------------------------------------
 
-int create (const char *path,
-            mode_t mode,
-            struct fuse_file_info *)
+int f4js_create (const char *path,
+                 mode_t mode,
+                 struct fuse_file_info *)
 {
   f4js_cmd.op = OP_CREATE;
   f4js_cmd.in_path = path;
@@ -156,10 +157,21 @@ int create (const char *path,
 
 // ---------------------------------------------------------------------------
 
-int utimens (const char *,
-             const struct timespec tv[2])
+int f4js_utimens (const char *,
+                  const struct timespec tv[2])
 {
   return 0; // stub out for now to make "touch" command succeed
+}
+
+// ---------------------------------------------------------------------------
+
+int f4js_unlink (const char *path)
+{
+  f4js_cmd.op = OP_UNLINK;
+  f4js_cmd.in_path = path;
+  uv_async_send(&f4js.async);
+  sem_wait(&f4js.sem);  
+  return f4js_cmd.retval;   
 }
 
 // ---------------------------------------------------------------------------
@@ -167,13 +179,14 @@ int utimens (const char *,
 void *fuse_thread(void *)
 {
   struct fuse_operations ops = { 0 };
-  ops.getattr = getattr;
-  ops.readdir = readdir;
-  ops.open = open;
-  ops.read = read;
-  ops.write = write;
-  ops.create = create;
-  ops.utimens = utimens;
+  ops.getattr = f4js_getattr;
+  ops.readdir = f4js_readdir;
+  ops.open = f4js_open;
+  ops.read = f4js_read;
+  ops.write = f4js_write;
+  ops.create = f4js_create;
+  ops.utimens = f4js_utimens;
+  ops.unlink = f4js_unlink;
   char *argv[] = { "dummy", "-s", "-d", f4js.root };
   fuse_main(4, argv, &ops, NULL);
   f4js_cmd.op = OP_EXIT;
@@ -240,7 +253,7 @@ Handle<Value> ReadDirCompletion(const Arguments& args)
 
 // ---------------------------------------------------------------------------
 
-Handle<Value> OpenCompletion(const Arguments& args)
+Handle<Value> GenericCompletion(const Arguments& args)
 {
   HandleScope scope;
   if (args.Length() >= 1 && args[0]->IsNumber()) {
@@ -363,12 +376,17 @@ static void DispatchOp(uv_async_t* handle, int status) {
   
   case OP_OPEN:
     symName = "open";
-    tpl = FunctionTemplate::New(OpenCompletion);
+    tpl = FunctionTemplate::New(GenericCompletion);
     break;
 
   case OP_CREATE:
     symName = "create";
-    tpl = FunctionTemplate::New(OpenCompletion); // use the same completion handler as open()
+    tpl = FunctionTemplate::New(GenericCompletion);
+    break;
+
+  case OP_UNLINK:
+    symName = "unlink";
+    tpl = FunctionTemplate::New(GenericCompletion);
     break;
 
   case OP_READ:

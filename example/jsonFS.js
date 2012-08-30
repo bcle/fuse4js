@@ -58,12 +58,12 @@ var getattr = function (path, cb) {
     
   case 'object': // directory
     stat.st_size = 4096;   // standard size of a directory
-    stat.st_mode = 040644; // 16877; // 040755 = directory with 0755 permission
+    stat.st_mode = 040777; // directory with 777 permissions
     break;
   
   case 'string': // file
     stat.st_size = node.length;
-    stat.st_mode = 0100644; // 33261; // Octal 0100755 : file with 755 permissions
+    stat.st_mode = 0100666; // file with 666 permissions
     break;
     
   default:
@@ -241,13 +241,42 @@ var create = function (path, cb) {
   cb(err);
 }
 
+/*
+ * Handler for the unlink() system call.
+ * path: the path to the file
+ * cb: a callback of the form cb(err), where err is the Posix return code.
+ */
+var unlink = function (path, cb) {
+  var err = 0; // assume success
+  var info = lookup(obj, path);
+  
+  switch (typeof info.node) {
+  case 'undefined':
+    err = -2; // -ENOENT      
+    break;
+
+  case 'object': // existing directory
+    err = -1; // -EPERM
+    break;
+
+  case 'string': // existing file
+    delete info.parent[info.name];
+    break;
+    
+  default:
+    break;
+  }
+  cb(err);
+}
+
 var handlers = {
   getattr: getattr,
   readdir: readdir,
   open: open,
   read: read,
   write: write,
-  create: create
+  create: create,
+  unlink: unlink
 };
 
 f4js.start("/devel/mnt", handlers);
