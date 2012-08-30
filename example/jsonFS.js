@@ -289,7 +289,7 @@ var unlink = function (path, cb) {
 
 /*
  * Handler for the rename() system call.
- * src: the path of the file to rename
+ * src: the path of the file or directory to rename
  * dst: the new path
  * cb: a callback of the form cb(err), where err is the Posix return code.
  */
@@ -297,7 +297,7 @@ var rename = function (src, dst, cb) {
   var err = -2; // -ENOENT assume failure
   var source = lookup(obj, src), dest;
   
-  if (typeof source.node === 'string') {
+  if (typeof source.node !== 'undefined') { // existing file or directory
     dest = lookup(obj, dst);
     if (typeof dest.node === 'undefined' && dest.parent !== null) {
       dest.parent[dest.name] = source.node;
