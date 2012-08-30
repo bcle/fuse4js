@@ -315,31 +315,6 @@ Handle<Value> ReadCompletion(const Arguments& args)
 
 // ---------------------------------------------------------------------------
 
-static void DispatchRead()
-{
-  Local<FunctionTemplate> tpl = FunctionTemplate::New(ReadCompletion);
-  Local<Function> handler = Local<Function>::Cast(f4js.handlers->Get(String::NewSymbol("read")));
-  if (handler->IsUndefined()) {
-    sem_post(&f4js.sem);
-    return;
-  }
-  Local<Function> cb = tpl->GetFunction();
-  cb->SetName(String::NewSymbol("readCompletion"));
-  Local<String> path = String::New(f4js_cmd.in_path);
-  
-  node::Buffer* buffer = node::Buffer::New(f4js_cmd.u.rw.len);
-  f4js.nodeBuffer = Persistent<Object>::New(buffer->handle_); 
-  
-  // FIXME: large 64-bit file offsets cannot be precisely stored in a JS number 
-  Local<Number> offset = Number::New((double)f4js_cmd.u.rw.offset);
-  
-  Local<Number> len = Number::New((double)f4js_cmd.u.rw.len);
-  Handle<Value> argv[] = { path, offset, len, f4js.nodeBuffer, cb };
-  handler->Call(Context::GetCurrent()->Global(), 5, argv);  
-}
-
-// ---------------------------------------------------------------------------
-
 Handle<Value> WriteCompletion(const Arguments& args)
 {
   HandleScope scope;
@@ -354,31 +329,6 @@ Handle<Value> WriteCompletion(const Arguments& args)
 
 // ---------------------------------------------------------------------------
 
-static void DispatchWrite()
-{
-  Local<FunctionTemplate> tpl = FunctionTemplate::New(WriteCompletion);
-  Local<Function> handler = Local<Function>::Cast(f4js.handlers->Get(String::NewSymbol("write")));
-  if (handler->IsUndefined()) {
-    sem_post(&f4js.sem);
-    return;
-  }
-  Local<Function> cb = tpl->GetFunction();
-  cb->SetName(String::NewSymbol("writeCompletion"));
-  Local<String> path = String::New(f4js_cmd.in_path);
-  
-  node::Buffer* buffer = node::Buffer::New((char*)f4js_cmd.u.rw.srcBuf, f4js_cmd.u.rw.len);
-  f4js.nodeBuffer = Persistent<Object>::New(buffer->handle_); 
-  
-  // FIXME: large 64-bit file offsets cannot be precisely stored in a JS number 
-  Local<Number> offset = Number::New((double)f4js_cmd.u.rw.offset);
-  
-  Local<Number> len = Number::New((double)f4js_cmd.u.rw.len);
-  Handle<Value> argv[] = { path, offset, len, f4js.nodeBuffer, cb };
-  handler->Call(Context::GetCurrent()->Global(), 5, argv);  
-}
-
-// ---------------------------------------------------------------------------
-
 // Called from the main thread.
 static void DispatchOp(uv_async_t* handle, int status)
 {
@@ -387,9 +337,10 @@ static void DispatchOp(uv_async_t* handle, int status)
   Local<FunctionTemplate> tpl = FunctionTemplate::New(GenericCompletion); // default
   f4js_cmd.retval = -EPERM;
   int argc = 0;
-  Local<Value> argv[5];  
+  Handle<Value> argv[5];  
   Local<String> path = String::New(f4js_cmd.in_path);  
   argv[argc++] = path;
+  node::Buffer* buffer = NULL; // used for read/write operations
   
   switch (f4js_cmd.op) {
   case OP_EXIT:
@@ -410,15 +361,26 @@ static void DispatchOp(uv_async_t* handle, int status)
     break;
 
   case OP_READ:
-    DispatchRead();
-    return;
+    tpl = FunctionTemplate::New(ReadCompletion);
+    buffer = node::Buffer::New(f4js_cmd.u.rw.len);
+    break;
     
   case OP_WRITE:
-    DispatchWrite();
-    return;
+    tpl = FunctionTemplate::New(WriteCompletion);   
+    buffer = node::Buffer::New((char*)f4js_cmd.u.rw.srcBuf, f4js_cmd.u.rw.len);
+    break;
     
   default:
     break;
+  }
+  
+  // Additional args for read/write operations
+  if (buffer) { 
+    // FIXME: 64-bit off_t cannot always fit in a JS number 
+    argv[argc++] = Number::New((double)f4js_cmd.u.rw.offset);  
+    argv[argc++] = Number::New((double)f4js_cmd.u.rw.len);
+    f4js.nodeBuffer = Persistent<Object>::New(buffer->handle_);   
+    argv[argc++] = f4js.nodeBuffer;
   }
   
   Local<Function> handler = Local<Function>::Cast(f4js.handlers->Get(String::NewSymbol(symName.c_str())));
