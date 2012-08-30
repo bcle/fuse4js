@@ -43,7 +43,8 @@ enum fuseop_t {
   OP_READDIR = 2,
   OP_OPEN = 3,
   OP_READ = 4,
-  OP_WRITE = 5
+  OP_WRITE = 5,
+  OP_CREATE = 6
 };
 
 static struct {
@@ -142,6 +143,27 @@ int write (const char *path,
 
 // ---------------------------------------------------------------------------
 
+int create (const char *path,
+            mode_t mode,
+            struct fuse_file_info *)
+{
+  f4js_cmd.op = OP_CREATE;
+  f4js_cmd.in_path = path;
+  uv_async_send(&f4js.async);
+  sem_wait(&f4js.sem);  
+  return f4js_cmd.retval;   
+}
+
+// ---------------------------------------------------------------------------
+
+int utimens (const char *,
+             const struct timespec tv[2])
+{
+  return 0; // stub out for now to make "touch" command succeed
+}
+
+// ---------------------------------------------------------------------------
+
 void *fuse_thread(void *)
 {
   struct fuse_operations ops = { 0 };
@@ -150,6 +172,8 @@ void *fuse_thread(void *)
   ops.open = open;
   ops.read = read;
   ops.write = write;
+  ops.create = create;
+  ops.utimens = utimens;
   char *argv[] = { "dummy", "-s", "-d", f4js.root };
   fuse_main(4, argv, &ops, NULL);
   f4js_cmd.op = OP_EXIT;
@@ -340,6 +364,11 @@ static void DispatchOp(uv_async_t* handle, int status) {
   case OP_OPEN:
     symName = "open";
     tpl = FunctionTemplate::New(OpenCompletion);
+    break;
+
+  case OP_CREATE:
+    symName = "create";
+    tpl = FunctionTemplate::New(OpenCompletion); // use the same completion handler as open()
     break;
 
   case OP_READ:

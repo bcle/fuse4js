@@ -31,6 +31,9 @@ function lookup(root, path) {
     } else if (cur !== undefined ){
       name = comps[i];
       cur = cur[name];
+      if (cur === undefined) {
+        break;
+      }
     }
   }
   return {node:cur, parent:previous, name:name};
@@ -209,12 +212,42 @@ var write = function (path, offset, len, buf, cb) {
   cb(err);
 }
 
+/*
+ * Handler for the create() system call.
+ * path: the path to the file
+ * cb: a callback of the form cb(err), where err is the Posix return code.
+ */
+var create = function (path, cb) {
+  var err = 0; // assume success
+  var info = lookup(obj, path);
+  
+  switch (typeof info.node) {
+  case 'undefined':
+    if (info.parent !== null) {
+      info.parent[info.name] = '';
+    } else {
+      err = -2; // -ENOENT      
+    }
+    break;
+
+  case 'string': // existing file
+  case 'object': // existing directory
+    err = -17; // -EEXIST
+    break;
+      
+  default:
+    break;
+  }
+  cb(err);
+}
+
 var handlers = {
   getattr: getattr,
   readdir: readdir,
   open: open,
   read: read,
-  write: write
+  write: write,
+  create: create
 };
 
 f4js.start("/devel/mnt", handlers);
