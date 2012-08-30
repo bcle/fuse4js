@@ -45,7 +45,8 @@ enum fuseop_t {
   OP_READ = 4,
   OP_WRITE = 5,
   OP_CREATE = 6,
-  OP_UNLINK = 7
+  OP_UNLINK = 7,
+  OP_RENAME = 8
 };
 
 static struct {
@@ -65,6 +66,9 @@ static struct {
       char *dstBuf;
       const char *srcBuf; 
     } rw;
+    struct {
+      const char *dst;
+    } rename;
   } u;
   int retval;
 } f4js_cmd;
@@ -176,6 +180,18 @@ int f4js_unlink (const char *path)
 
 // ---------------------------------------------------------------------------
 
+int f4js_rename (const char *src, const char *dst)
+{
+  f4js_cmd.op = OP_RENAME;
+  f4js_cmd.in_path = src;
+  f4js_cmd.u.rename.dst = dst;
+  uv_async_send(&f4js.async);
+  sem_wait(&f4js.sem);  
+  return f4js_cmd.retval;   
+}
+
+// ---------------------------------------------------------------------------
+
 void *fuse_thread(void *)
 {
   struct fuse_operations ops = { 0 };
@@ -187,6 +203,7 @@ void *fuse_thread(void *)
   ops.create = f4js_create;
   ops.utimens = f4js_utimens;
   ops.unlink = f4js_unlink;
+  ops.rename = f4js_rename;
   char *argv[] = { "dummy", "-s", "-d", f4js.root };
   fuse_main(4, argv, &ops, NULL);
   f4js_cmd.op = OP_EXIT;
@@ -355,8 +372,13 @@ static void DispatchWrite()
 static void DispatchOp(uv_async_t* handle, int status) {
   HandleScope scope;
   std::string symName;
-  Local<FunctionTemplate> tpl;
+  Local<FunctionTemplate> tpl = FunctionTemplate::New(GenericCompletion); // default
   f4js_cmd.retval = -EPERM;
+  int argc = 0;
+  Local<Value> argv[5];
+  
+  Local<String> path = String::New(f4js_cmd.in_path);  
+  argv[argc++] = path;
   
   switch (f4js_cmd.op) {
   case OP_EXIT:
@@ -376,17 +398,19 @@ static void DispatchOp(uv_async_t* handle, int status) {
   
   case OP_OPEN:
     symName = "open";
-    tpl = FunctionTemplate::New(GenericCompletion);
     break;
 
   case OP_CREATE:
     symName = "create";
-    tpl = FunctionTemplate::New(GenericCompletion);
     break;
 
   case OP_UNLINK:
     symName = "unlink";
-    tpl = FunctionTemplate::New(GenericCompletion);
+    break;
+    
+  case OP_RENAME:
+    symName = "rename";
+    argv[argc++] = String::New(f4js_cmd.u.rename.dst);
     break;
 
   case OP_READ:
@@ -411,9 +435,8 @@ static void DispatchOp(uv_async_t* handle, int status) {
   Local<Function> cb = tpl->GetFunction();
   std::string cbName = symName + "Completion";
   cb->SetName(String::NewSymbol(cbName.c_str()));
-  Local<String> path = String::New(f4js_cmd.in_path);
-  Local<Value> argv[] = { path, cb };
-  handler->Call(Context::GetCurrent()->Global(), 2, argv);  
+  argv[argc++] = cb;
+  handler->Call(Context::GetCurrent()->Global(), argc, argv);  
 }
 
 // ---------------------------------------------------------------------------
