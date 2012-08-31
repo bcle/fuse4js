@@ -1,18 +1,9 @@
 
-f4js = require('../build/Debug/fuse4js.node')
+var f4js = require('../build/Debug/fuse4js.node');
+var fs = require('fs');
+var obj = null;   // The JSON object we'll be exposing as a file system
+var options = {};  // See parseArgs()
 
-var obj = {
-  'hello.txt': "Hello world!\n",
-  'dir1': {
-    'welcome.txt': "Welcome to fuse4js\n",
-    'dir2': {
-      'dummy.txt': "Dummy\n",
-      'dummy2.txt': "Dummy 2\n"
-    },
-    'bienvenue.txt': "Bienvenue!\n",    
-  },
-  'goodbye.txt': "Goodbye\n"
-};
 
 //---------------------------------------------------------------------------
 
@@ -360,6 +351,13 @@ var init = function (cb) {
  * cb: a callback to call when you're done. It takes no arguments.
  */
 var destroy = function (cb) {
+  if (options.outJson) {
+    try {
+      fs.writeFileSync(options.outJson, JSON.stringify(obj, null, '  '), 'utf8');
+    } catch (e) {
+      console.log("Exception when writing file: " + e);
+    }
+  }
   cb();
 }
 
@@ -382,6 +380,53 @@ var handlers = {
 
 //---------------------------------------------------------------------------
 
-f4js.start("/devel/mnt", handlers);
+function usage() {
+  console.log("usage: node jsonFS.js [options] inputJsonFile mountPoint");
+  console.log("options:");
+  console.log("-o outputJsonFile  : save modified data to new JSON file. Input file is never modified.");
+  console.log("-d                 : make FUSE print debug statements.")
+}
 
+//---------------------------------------------------------------------------
 
+function parseArgs() {
+  var i, remaining;
+  var args = process.argv;
+  if (args.length < 4) {
+    return false;
+  }
+  options.mountPoint = args[args.length - 1];
+  options.inJson = args[args.length - 2];
+  remaining = args.length - 4;
+  i = 2;
+  while (remaining--) {
+    if (args[i] === '-d') {
+      options.debugFuse = true;
+      ++i;
+    } else if (args[i] === '-o') {
+      if (remaining) {
+        options.outJson = args[i+1];
+        i += 2;
+        --remaining;
+      } else return false;
+    } else return false;
+  }
+  return true;
+}
+
+//---------------------------------------------------------------------------
+
+if (parseArgs()) {
+  console.log("input file: " + options.inJson);
+  console.log("mount point: " + options.mountPoint);
+  if (options.outJson)
+    console.log("output file: " + options.outJson);
+  if (options.debugFuse)
+    console.log("FUSE debugging enabled");
+  content = fs.readFileSync(options.inJson, 'utf8');
+  obj = JSON.parse(content);
+  f4js.start(options.mountPoint, handlers);
+  console.log("File system started");
+} else {
+  usage();
+}
