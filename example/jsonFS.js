@@ -210,7 +210,6 @@ var write = function (path, offset, len, buf, cb) {
     } else {
       beginning = file;
       numBlankChars = offset - file.length;
-      console.log("numBlankChars = " + numBlankChars);
       while (numBlankChars--) blank += ' ';
     }
     delete parent[name];
@@ -380,6 +379,8 @@ var handlers = {
   init: init,
   destroy: destroy
 };
+
+//---------------------------------------------------------------------------
 
 f4js.start("/devel/mnt", handlers);
 

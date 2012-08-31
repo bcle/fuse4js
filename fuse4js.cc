@@ -38,23 +38,21 @@ static struct {
 } f4js;
 
 enum fuseop_t {  
-  OP_EXIT = 0,
-  OP_GETATTR = 1,
-  OP_READDIR = 2,
-  OP_OPEN = 3,
-  OP_READ = 4,
-  OP_WRITE = 5,
-  OP_CREATE = 6,
-  OP_UNLINK = 7,
-  OP_RENAME = 8,
-  OP_MKDIR = 9,
-  OP_RMDIR = 10,
-  OP_INIT = 11,
-  OP_DESTROY = 12
+  OP_GETATTR = 0,
+  OP_READDIR,
+  OP_OPEN,
+  OP_READ,
+  OP_WRITE,
+  OP_CREATE,
+  OP_UNLINK,
+  OP_RENAME,
+  OP_MKDIR,
+  OP_RMDIR,
+  OP_INIT,
+  OP_DESTROY
 };
 
 const char* fuseop_names[] = {
-    "exit",
     "getattr",
     "readdir",
     "open",
@@ -241,9 +239,6 @@ void *fuse_thread(void *)
   ops.destroy = f4js_destroy;
   char *argv[] = { (char*)"dummy", (char*)"-s", (char*)"-d", f4js.root };
   fuse_main(4, argv, &ops, NULL);
-  f4js_cmd.in_path = ""; // Ugly. To make DispatchOp() happy.
-  f4js_cmd.op = OP_EXIT;
-  uv_async_send(&f4js.async);
   return NULL;
 }
 
@@ -308,11 +303,18 @@ Handle<Value> ReadDirCompletion(const Arguments& args)
 Handle<Value> GenericCompletion(const Arguments& args)
 {
   HandleScope scope;
+  bool exiting = (f4js_cmd.op == OP_DESTROY);
+  
   if (args.Length() >= 1 && args[0]->IsNumber()) {
     Local<Number> retval = Local<Number>::Cast(args[0]);
     f4js_cmd.retval = (int)retval->Value();    
   }
-  sem_post(&f4js.sem);  
+  sem_post(&f4js.sem);
+  
+  if (exiting) {
+    pthread_join(f4js.fuse_thread, NULL);
+    uv_unref((uv_handle_t*) &f4js.async);    
+  }
   return scope.Close(Undefined());    
 }
 
@@ -367,15 +369,11 @@ static void DispatchOp(uv_async_t* handle, int status)
   node::Buffer* buffer = NULL; // used for read/write operations
   
   switch (f4js_cmd.op) {
-  case OP_EXIT:
-    pthread_join(f4js.fuse_thread, NULL);
-    uv_unref((uv_handle_t*) &f4js.async);
-    return;
-    
+  
   case OP_INIT:
   case OP_DESTROY:
     f4js_cmd.retval = 0; // Will be used as the return value of OP_INIT.
-    --argc;  // Ugly. Remove the first argument (path) because it's not needed.
+    --argc;              // Ugly. Remove the first argument (path) because not needed.
     break;
     
   case OP_GETATTR:
