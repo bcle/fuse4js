@@ -32,7 +32,7 @@ static struct {
   uv_async_t async;
   sem_t sem;
   pthread_t fuse_thread;
-  char root[256];
+  std::string root;
   Persistent<Object> handlers;
   Persistent<Object> nodeBuffer;  
 } f4js;
@@ -237,7 +237,7 @@ void *fuse_thread(void *)
   ops.rmdir = f4js_rmdir;
   ops.init = f4js_init;
   ops.destroy = f4js_destroy;
-  char *argv[] = { (char*)"dummy", (char*)"-s", (char*)"-d", f4js.root };
+  char *argv[] = { (char*)"dummy", (char*)"-s", (char*)"-d", (char*)f4js.root.c_str() };
   fuse_main(4, argv, &ops, NULL);
   return NULL;
 }
@@ -445,7 +445,7 @@ Handle<Value> Start(const Arguments& args)
     ThrowException(Exception::TypeError(String::New("Path is incorrect")));
     return scope.Close(Undefined());
   }
-  strncpy(f4js.root, root, sizeof(f4js.root));
+  f4js.root = root;
   f4js.handlers = Persistent<Object>::New(Local<Object>::Cast(args[1]));
 
   sem_init(&f4js.sem, 0, 0);
