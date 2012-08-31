@@ -48,7 +48,9 @@ enum fuseop_t {
   OP_UNLINK = 7,
   OP_RENAME = 8,
   OP_MKDIR = 9,
-  OP_RMDIR = 10
+  OP_RMDIR = 10,
+  OP_INIT = 11,
+  OP_DESTROY = 12
 };
 
 const char* fuseop_names[] = {
@@ -62,7 +64,9 @@ const char* fuseop_names[] = {
     "unlink",
     "rename",
     "mkdir",
-    "rmdir"
+    "rmdir",
+    "init",
+    "destroy"
 };
 
 static struct {
@@ -202,6 +206,23 @@ int f4js_rmdir (const char *path)
 
 // ---------------------------------------------------------------------------
 
+
+void* f4js_init(struct fuse_conn_info *conn)
+{
+  // We currently always return NULL
+  return (void*)f4js_rpc(OP_INIT, "");
+}
+
+// ---------------------------------------------------------------------------
+
+void f4js_destroy (void *data)
+{
+  // We currently ignore the data pointer, which init() always sets to NULL
+  f4js_rpc(OP_DESTROY, "");
+}
+
+// ---------------------------------------------------------------------------
+
 void *fuse_thread(void *)
 {
   struct fuse_operations ops = { 0 };
@@ -216,8 +237,11 @@ void *fuse_thread(void *)
   ops.rename = f4js_rename;
   ops.mkdir = f4js_mkdir;
   ops.rmdir = f4js_rmdir;
-  char *argv[] = { "dummy", "-s", "-d", f4js.root };
+  ops.init = f4js_init;
+  ops.destroy = f4js_destroy;
+  char *argv[] = { (char*)"dummy", (char*)"-s", (char*)"-d", f4js.root };
   fuse_main(4, argv, &ops, NULL);
+  f4js_cmd.in_path = ""; // Ugly. To make DispatchOp() happy.
   f4js_cmd.op = OP_EXIT;
   uv_async_send(&f4js.async);
   return NULL;
@@ -347,6 +371,12 @@ static void DispatchOp(uv_async_t* handle, int status)
     pthread_join(f4js.fuse_thread, NULL);
     uv_unref((uv_handle_t*) &f4js.async);
     return;
+    
+  case OP_INIT:
+  case OP_DESTROY:
+    f4js_cmd.retval = 0; // Will be used as the return value of OP_INIT.
+    --argc;  // Ugly. Remove the first argument (path) because it's not needed.
+    break;
     
   case OP_GETATTR:
     tpl = FunctionTemplate::New(GetAttrCompletion);

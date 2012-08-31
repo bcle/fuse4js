@@ -346,6 +346,26 @@ var rmdir = function (path, cb) {
 
 //---------------------------------------------------------------------------
 
+/*
+ * Handler for the init() FUSE hook. You can initialize your file system here.
+ * cb: a callback to call when you're done initializing. It takes no arguments.
+ */
+var init = function (cb) {
+  cb();
+}
+
+//---------------------------------------------------------------------------
+
+/*
+ * Handler for the destroy() FUSE hook. You can perform clean up tasks here.
+ * cb: a callback to call when you're done. It takes no arguments.
+ */
+var destroy = function (cb) {
+  cb();
+}
+
+//---------------------------------------------------------------------------
+
 var handlers = {
   getattr: getattr,
   readdir: readdir,
@@ -356,7 +376,9 @@ var handlers = {
   unlink: unlink,
   rename: rename,
   mkdir: mkdir,
-  rmdir: rmdir
+  rmdir: rmdir,
+  init: init,
+  destroy: destroy
 };
 
 f4js.start("/devel/mnt", handlers);
