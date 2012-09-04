@@ -237,8 +237,11 @@ void *fuse_thread(void *)
   ops.rmdir = f4js_rmdir;
   ops.init = f4js_init;
   ops.destroy = f4js_destroy;
-  char *argv[] = { (char*)"dummy", (char*)"-s", (char*)"-d", (char*)f4js.root.c_str() };
-  fuse_main(4, argv, &ops, NULL);
+  char *argv[] = { (char*)"dummy", (char*)"-s", (char*)"-f", (char*)f4js.root.c_str() };
+  if (fuse_main(4, argv, &ops, NULL)) {
+    // Error occured
+    f4js_destroy(NULL);
+  }
   return NULL;
 }
 

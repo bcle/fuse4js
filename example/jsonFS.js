@@ -341,6 +341,8 @@ var rmdir = function (path, cb) {
  * cb: a callback to call when you're done initializing. It takes no arguments.
  */
 var init = function (cb) {
+  console.log("File system started at " + options.mountPoint);
+  console.log("To stop it, type this in another shell: fusermount -u " + options.mountPoint);
   cb();
 }
 
@@ -358,6 +360,7 @@ var destroy = function (cb) {
       console.log("Exception when writing file: " + e);
     }
   }
+  console.log("File system stopped");      
   cb();
 }
 
@@ -381,10 +384,15 @@ var handlers = {
 //---------------------------------------------------------------------------
 
 function usage() {
-  console.log("usage: node jsonFS.js [options] inputJsonFile mountPoint");
-  console.log("options:");
+  console.log();
+  console.log("Usage: node jsonFS.js [options] inputJsonFile mountPoint\n");
+  console.log("Options:");
   console.log("-o outputJsonFile  : save modified data to new JSON file. Input file is never modified.");
-  console.log("-d                 : make FUSE print debug statements.")
+  console.log("-d                 : make FUSE print debug statements.");
+  console.log();
+  console.log("Example:");
+  console.log("node example/jsonFS.fs -d -o /tmp/output.json example/sample.json /tmp/mnt");
+  console.log();
 }
 
 //---------------------------------------------------------------------------
@@ -417,16 +425,19 @@ function parseArgs() {
 //---------------------------------------------------------------------------
 
 if (parseArgs()) {
-  console.log("input file: " + options.inJson);
-  console.log("mount point: " + options.mountPoint);
+  console.log("\nInput file: " + options.inJson);
+  console.log("Mount point: " + options.mountPoint);
   if (options.outJson)
-    console.log("output file: " + options.outJson);
+    console.log("Output file: " + options.outJson);
   if (options.debugFuse)
     console.log("FUSE debugging enabled");
   content = fs.readFileSync(options.inJson, 'utf8');
   obj = JSON.parse(content);
-  f4js.start(options.mountPoint, handlers);
-  console.log("File system started");
+  try {
+    f4js.start(options.mountPoint, handlers);
+  } catch (e) {
+    console.log("Exception when starting file system: " + e);
+  }
 } else {
   usage();
 }
