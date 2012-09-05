@@ -29,6 +29,7 @@ using namespace v8;
 // ---------------------------------------------------------------------------
 
 static struct {
+  bool enableFuseDebug;
   uv_async_t async;
   sem_t sem;
   pthread_t fuse_thread;
@@ -237,7 +238,8 @@ void *fuse_thread(void *)
   ops.rmdir = f4js_rmdir;
   ops.init = f4js_init;
   ops.destroy = f4js_destroy;
-  char *argv[] = { (char*)"dummy", (char*)"-s", (char*)"-f", (char*)f4js.root.c_str() };
+  const char* debugOption = f4js.enableFuseDebug? "-d":"-f";
+  char *argv[] = { (char*)"dummy", (char*)"-s", (char*)debugOption, (char*)f4js.root.c_str() };
   if (fuse_main(4, argv, &ops, NULL)) {
     // Error occured
     f4js_destroy(NULL);
@@ -448,6 +450,13 @@ Handle<Value> Start(const Arguments& args)
     ThrowException(Exception::TypeError(String::New("Path is incorrect")));
     return scope.Close(Undefined());
   }
+  
+  f4js.enableFuseDebug = false;
+  if (args.Length() >= 3) {
+    Local <Boolean> debug = args[2]->ToBoolean();
+    f4js.enableFuseDebug = debug->BooleanValue();
+  }
+  
   f4js.root = root;
   f4js.handlers = Persistent<Object>::New(Local<Object>::Cast(args[1]));
 

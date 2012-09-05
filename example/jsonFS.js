@@ -127,7 +127,7 @@ var open = function (path, cb) {
  * len: the number of bytes to read
  * buf: the Buffer to write the data to
  * cb: a callback of the form cb(err), where err is the Posix return code.
- *     A positive value represents the number of bytes read.
+ *     A positive value represents the number of bytes actually read.
  */
 var read = function (path, offset, len, buf, cb) {
   var err = 0; // assume success
@@ -172,7 +172,7 @@ var read = function (path, offset, len, buf, cb) {
  * len: the number of bytes to write
  * buf: the Buffer to read data from
  * cb: a callback of the form cb(err), where err is the Posix return code.
- *     A positive value represents the number of bytes written.
+ *     A positive value represents the number of bytes actually written.
  */
 var write = function (path, offset, len, buf, cb) {
   var err = 0; // assume success
@@ -385,7 +385,8 @@ var handlers = {
 
 function usage() {
   console.log();
-  console.log("Usage: node jsonFS.js [options] inputJsonFile mountPoint\n");
+  console.log("Usage: node jsonFS.js [options] inputJsonFile mountPoint");
+  console.log("(Ensure the mount point is empty and you have wrx permissions to it)\n")
   console.log("Options:");
   console.log("-o outputJsonFile  : save modified data to new JSON file. Input file is never modified.");
   console.log("-d                 : make FUSE print debug statements.");
@@ -424,20 +425,22 @@ function parseArgs() {
 
 //---------------------------------------------------------------------------
 
-if (parseArgs()) {
-  console.log("\nInput file: " + options.inJson);
-  console.log("Mount point: " + options.mountPoint);
-  if (options.outJson)
-    console.log("Output file: " + options.outJson);
-  if (options.debugFuse)
-    console.log("FUSE debugging enabled");
-  content = fs.readFileSync(options.inJson, 'utf8');
-  obj = JSON.parse(content);
-  try {
-    f4js.start(options.mountPoint, handlers);
-  } catch (e) {
-    console.log("Exception when starting file system: " + e);
+(function main() {
+  if (parseArgs()) {
+    console.log("\nInput file: " + options.inJson);
+    console.log("Mount point: " + options.mountPoint);
+    if (options.outJson)
+      console.log("Output file: " + options.outJson);
+    if (options.debugFuse)
+      console.log("FUSE debugging enabled");
+    content = fs.readFileSync(options.inJson, 'utf8');
+    obj = JSON.parse(content);
+    try {
+      f4js.start(options.mountPoint, handlers, options.debugFuse);
+    } catch (e) {
+      console.log("Exception when starting file system: " + e);
+    }
+  } else {
+    usage();
   }
-} else {
-  usage();
-}
+})();
