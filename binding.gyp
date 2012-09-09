@@ -7,7 +7,7 @@
           "sources": [ "fuse4js.cc" ],
           "link_settings": {
             "libraries": [
-              "/lib/libfuse.so.2"
+              '<!@(pkg-config --libs-only-l fuse)'
             ]
           }
         }

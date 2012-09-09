@@ -1,0 +1,26 @@
+{
+  "name": "fuse4js",
+  "version": "0.1.0",
+  "author": "Bich Le <bcle00@gmail.com>",
+  "description": "FUSE bindings for node.js",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/bcle/fuse4js.git"
+  },
+  "homepage": "http://github.com/bcle/fuse4js",
+  "keywords": [
+    "fuse",
+    "filesystem"
+  ],
+  "engines": {
+    "node": ">=0.8.6"
+  },
+  "main": "./build/Release/fuse4js.node",
+  "dependencies": {
+  },
+  "scripts": {
+    "install": "node-gyp rebuild"
+  },
+  "devDependencies": {},
+  "optionalDependencies": {}
+}
