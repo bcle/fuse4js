@@ -1,6 +1,6 @@
 /*
  * 
- * jsonFS.js
+ * mirrorFS.js
  * 
  * Copyright (c) 2012 VMware, Inc. All rights reserved.
  * 
@@ -20,37 +20,35 @@
  * 
  */
 
-var f4js = require('fuse4js');
+// var f4js = require('fuse4js');
+var f4js = require('../build/Debug/fuse4js.node');
 var fs = require('fs');
-var obj = null;   // The JSON object we'll be exposing as a file system
+var pth = require('path');
+var srcRoot = '/';   // The root of the file system we are mirroring
 var options = {};  // See parseArgs()
 
 
 //---------------------------------------------------------------------------
 
 /*
- * Given the name space represented by the object 'root', locate
- * the sub-object corresponding to the specified path
+ * Convert a node.js file system exception to a numerical errno value.
+ * This is necessary because the err.errno property appears to be wrong.
+ * On the other hand, the err.code string seems like a correct representation of the error,
+ * so we use that instead.
  */
-function lookup(root, path) {
-  var cur = null, previous = null, name = '';
-  if (path === '/') {
-    return { node:root, parent:null, name:'' };
-  }
-  comps = path.split('/');
-  for (i = 0; i < comps.length; ++i) {
-    previous = cur;
-    if (i == 0) {
-      cur = root;
-    } else if (cur !== undefined ){
-      name = comps[i];
-      cur = cur[name];
-      if (cur === undefined) {
-        break;
-      }
-    }
-  }
-  return {node:cur, parent:previous, name:name};
+
+var errnoMap = {
+    EPERM: 1,
+    ENOENT: 2,
+    EINVAL: 22,
+    EACCESS: 13    
+};
+
+function errToErrNo(err) {
+  errno = errnoMap[err.code];
+  if (!errno)
+    errno = 2; // default to ENOENT
+  return errno;
 }
 
 //---------------------------------------------------------------------------
@@ -62,30 +60,14 @@ function lookup(root, path) {
  *     and stat is the result in the form of a stat structure (when err === 0)
  */
 var getattr = function (path, cb) {	
-  var stat = {};
-  var err = 0; // assume success
-  var info = lookup(obj, path);
-  var node = info.node;
-
-  switch (typeof node) {
-  case 'undefined':
-    err = -2; // -ENOENT
-    break;
-    
-  case 'object': // directory
-    stat.size = 4096;   // standard size of a directory
-    stat.mode = 040777; // directory with 777 permissions
-    break;
   
-  case 'string': // file
-    stat.size = node.length;
-    stat.mode = 0100666; // file with 666 permissions
-    break;
-    
-  default:
-    break;
-  }
-  cb( err, stat );
+  path = pth.join(srcRoot, path);
+  return fs.lstat(path, function lstatCb(err, stats) {
+    if (err)      
+      return cb(-errToErrNo(err));
+    var millisecs = stats.mtime.getTime();
+    return cb(0, stats);
+  });
 };
 
 //---------------------------------------------------------------------------
@@ -97,29 +79,13 @@ var getattr = function (path, cb) {
  *     and names is the result in the form of an array of file names (when err === 0).
  */
 var readdir = function (path, cb) {
-  var names = [];
-  var err = 0; // assume success
-  var info = lookup(obj, path);
 
-  switch (typeof info.node) {
-  case 'undefined':
-    err = -2; // -ENOENT
-    break;
-    
-  case 'string': // file
-    err = -22; // -EINVAL
-    break;
-  
-  case 'object': // directory
-    var i = 0;
-    for (key in info.node)
-      names[i++] = key;
-    break;
-    
-  default:
-    break;
-  }
-  cb( err, names );
+  path = pth.join(srcRoot, path);
+  return fs.readdir(path, function readdirCb(err, files) {
+    if (err)      
+      return cb(-errToErrNo(err));
+    return cb(0, files);
+  });
 }
 
 //---------------------------------------------------------------------------
@@ -406,14 +372,10 @@ var handlers = {
 
 function usage() {
   console.log();
-  console.log("Usage: node jsonFS.js [options] inputJsonFile mountPoint");
+  console.log("Usage: node mirrorFS.js [options] sourceMountPoint mountPoint");
   console.log("(Ensure the mount point is empty and you have wrx permissions to it)\n")
   console.log("Options:");
-  console.log("-o outputJsonFile  : save modified data to new JSON file. Input file is never modified.");
   console.log("-d                 : make FUSE print debug statements.");
-  console.log();
-  console.log("Example:");
-  console.log("node example/jsonFS.fs -d -o /tmp/output.json example/sample.json /tmp/mnt");
   console.log();
 }
 
@@ -426,19 +388,13 @@ function parseArgs() {
     return false;
   }
   options.mountPoint = args[args.length - 1];
-  options.inJson = args[args.length - 2];
+  options.srcRoot = args[args.length - 2];
   remaining = args.length - 4;
   i = 2;
   while (remaining--) {
     if (args[i] === '-d') {
       options.debugFuse = true;
       ++i;
-    } else if (args[i] === '-o') {
-      if (remaining) {
-        options.outJson = args[i+1];
-        i += 2;
-        --remaining;
-      } else return false;
     } else return false;
   }
   return true;
@@ -448,14 +404,11 @@ function parseArgs() {
 
 (function main() {
   if (parseArgs()) {
-    console.log("\nInput file: " + options.inJson);
+    console.log("\nSource root: " + options.srcRoot);
     console.log("Mount point: " + options.mountPoint);
-    if (options.outJson)
-      console.log("Output file: " + options.outJson);
     if (options.debugFuse)
       console.log("FUSE debugging enabled");
-    content = fs.readFileSync(options.inJson, 'utf8');
-    obj = JSON.parse(content);
+    srcRoot = options.srcRoot;
     try {
       f4js.start(options.mountPoint, handlers, options.debugFuse);
     } catch (e) {

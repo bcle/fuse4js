@@ -1,3 +1,25 @@
+/*
+ * 
+ * fuse4js.cc
+ * 
+ * Copyright (c) 2012 VMware, Inc. All rights reserved.
+ * 
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; only version 2 of the License, and no
+ * later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * 
+ */
+
 #include <node.h>
 #include <node_buffer.h>
 #include <v8.h>
@@ -249,6 +271,24 @@ void *fuse_thread(void *)
 
 // ---------------------------------------------------------------------------
 
+void ConvertDate(Handle<Object> &stat,
+                 std::string name,
+                 struct timespec *out)
+{
+  Local<Value> prop = stat->Get(String::NewSymbol(name.c_str()));
+  if (!prop->IsUndefined() && prop->IsDate()) {
+    Local<Date> date = Local<Date>::Cast(prop);
+    double dateVal = date->NumberValue();              // total milliseconds
+    time_t seconds = (time_t)(dateVal / 1000.0);
+    time_t milliseconds = dateVal - (1000.0 * seconds); // remainder
+    time_t nanoseconds = milliseconds * 1000000.0;
+    out->tv_sec = seconds;
+    out->tv_nsec = nanoseconds;
+  }  
+}
+
+// ---------------------------------------------------------------------------
+
 Handle<Value> GetAttrCompletion(const Arguments& args)
 {
   HandleScope scope;
@@ -259,17 +299,33 @@ Handle<Value> GetAttrCompletion(const Arguments& args)
       memset(f4js_cmd.u.getattr.stbuf, 0, sizeof(*f4js_cmd.u.getattr.stbuf));
       Handle<Object> stat = Handle<Object>::Cast(args[1]);
       
-      Local<Value> prop = stat->Get(String::NewSymbol("st_size"));
+      Local<Value> prop = stat->Get(String::NewSymbol("size"));
       if (!prop->IsUndefined() && prop->IsNumber()) {
         Local<Number> num = Local<Number>::Cast(prop);
         f4js_cmd.u.getattr.stbuf->st_size = (off_t)num->Value();
       }
       
-      prop = stat->Get(String::NewSymbol("st_mode"));
+      prop = stat->Get(String::NewSymbol("mode"));
       if (!prop->IsUndefined() && prop->IsNumber()) {
         Local<Number> num = Local<Number>::Cast(prop);
         f4js_cmd.u.getattr.stbuf->st_mode = (mode_t)num->Value();
       }
+      
+      prop = stat->Get(String::NewSymbol("uid"));
+      if (!prop->IsUndefined() && prop->IsNumber()) {
+        Local<Number> num = Local<Number>::Cast(prop);
+        f4js_cmd.u.getattr.stbuf->st_uid = (uid_t)num->Value();
+      }
+
+      prop = stat->Get(String::NewSymbol("gid"));
+      if (!prop->IsUndefined() && prop->IsNumber()) {
+        Local<Number> num = Local<Number>::Cast(prop);
+        f4js_cmd.u.getattr.stbuf->st_gid = (gid_t)num->Value();
+      }
+
+      ConvertDate(stat, "mtime", &f4js_cmd.u.getattr.stbuf->st_mtim);
+      ConvertDate(stat, "ctime", &f4js_cmd.u.getattr.stbuf->st_ctim);
+      ConvertDate(stat, "atime", &f4js_cmd.u.getattr.stbuf->st_atim);
     }
   }
   sem_post(&f4js.sem);  

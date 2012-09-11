@@ -45,7 +45,7 @@ API Documentation
 ----------------- 
 Fuse4js currently implements a subset of all FUSE file operations. More will be added over time, but the initial set is sufficient to implement a basic read/write file system.
 
-You implement a file system by registering Javascript handler functions with fuse4js. Each handler handles a particular FUSE operation. While the arguments passed to a handler vary depending on the requested operation, the last argument is always a callback function that you invoke when you are finished servicing the request. The arguments to the callback typically include an error code, followed by zero or more additional arguments depending on the FUSE operation.
+You implement a file system by registering Javascript handler functions with fuse4js. Each handler handles a particular FUSE operation. While the arguments passed to a handler vary depending on the requested operation, the last argument is always a callback function that you invoke when you are finished servicing the request. The arguments to the callback typically include an error code, followed by zero or more additional arguments depending on the FUSE operation. Following FUSE conventions, the error code is set to a negated 'errno' value to indicate error, and zero or a positive value (for read/write operations) to indicate success.
 
 We currently don't have a formal document for the Javascript interface corresponding to each FUSE operation. Instead, it is documented in the comments for each handler in the `jsonFS.js` sample program, so use that as the reference for now.
 
