@@ -19,8 +19,8 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  * 
  */
-
-var f4js = require('fuse4js');
+var f4js = require('../build/Debug/fuse4js.node');
+//  var f4js = require('fuse4js');
 var fs = require('fs');
 var obj = null;   // The JSON object we'll be exposing as a file system
 var options = {};  // See parseArgs()
@@ -61,7 +61,7 @@ function lookup(root, path) {
  * cb: a callback of the form cb(err, stat), where err is the Posix return code
  *     and stat is the result in the form of a stat structure (when err === 0)
  */
-var getattr = function (path, cb) {	
+function getattr(path, cb) {	
   var stat = {};
   var err = 0; // assume success
   var info = lookup(obj, path);
@@ -96,7 +96,7 @@ var getattr = function (path, cb) {
  * cb: a callback of the form cb(err, names), where err is the Posix return code
  *     and names is the result in the form of an array of file names (when err === 0).
  */
-var readdir = function (path, cb) {
+function readdir(path, cb) {
   var names = [];
   var err = 0; // assume success
   var info = lookup(obj, path);
@@ -127,16 +127,19 @@ var readdir = function (path, cb) {
 /*
  * Handler for the open() system call.
  * path: the path to the file
- * cb: a callback of the form cb(err), where err is the Posix return code
+ * flags: requested access flags as documented in open(2)
+ * cb: a callback of the form cb(err, [fh]), where err is the Posix return code
+ *     and fh is an optional numerical file handle, which is passed to subsequent
+ *     read(), write(), and release() calls.
  */
-var open = function (path, cb) {
+function open(path, flags, cb) {
   var err = 0; // assume success
   var info = lookup(obj, path);
   
   if (typeof info.node === 'undefined') {
-    err = -ENOENT;
+    err = -2; // -ENOENT
   }
-  cb(err);
+  cb(err); // we don't return a file handle, so fuse4js will initialize it to 0
 }
 
 //---------------------------------------------------------------------------
@@ -147,10 +150,11 @@ var open = function (path, cb) {
  * offset: the file offset to read from
  * len: the number of bytes to read
  * buf: the Buffer to write the data to
+ * fh:  the optional file handle originally returned by open(), or 0 if it wasn't
  * cb: a callback of the form cb(err), where err is the Posix return code.
  *     A positive value represents the number of bytes actually read.
  */
-var read = function (path, offset, len, buf, cb) {
+function read(path, offset, len, buf, fh, cb) {
   var err = 0; // assume success
   var info = lookup(obj, path);
   var file = info.node;
@@ -192,10 +196,11 @@ var read = function (path, offset, len, buf, cb) {
  * offset: the file offset to write to
  * len: the number of bytes to write
  * buf: the Buffer to read data from
+ * fh:  the optional file handle originally returned by open(), or 0 if it wasn't
  * cb: a callback of the form cb(err), where err is the Posix return code.
  *     A positive value represents the number of bytes actually written.
  */
-var write = function (path, offset, len, buf, cb) {
+function write(path, offset, len, buf, fh, cb) {
   var err = 0; // assume success
   var info = lookup(obj, path);
   var file = info.node;
@@ -238,11 +243,26 @@ var write = function (path, offset, len, buf, cb) {
 //---------------------------------------------------------------------------
 
 /*
- * Handler for the create() system call.
+ * Handler for the release() system call.
  * path: the path to the file
+ * fh:  the optional file handle originally returned by open(), or 0 if it wasn't
  * cb: a callback of the form cb(err), where err is the Posix return code.
  */
-var create = function (path, cb) {
+function release(path, fh, cb) {
+  cb(0);
+}
+
+//---------------------------------------------------------------------------
+
+/*
+ * Handler for the create() system call.
+ * path: the path of the new file
+ * mode: the desired permissions of the new file
+ * cb: a callback of the form cb(err, [fh]), where err is the Posix return code
+ *     and fh is an optional numerical file handle, which is passed to subsequent
+ *     read(), write(), and release() calls (it's set to 0 if fh is unspecified)
+ */
+function create (path, mode, cb) {
   var err = 0; // assume success
   var info = lookup(obj, path);
   
@@ -273,7 +293,7 @@ var create = function (path, cb) {
  * path: the path to the file
  * cb: a callback of the form cb(err), where err is the Posix return code.
  */
-var unlink = function (path, cb) {
+function unlink(path, cb) {
   var err = 0; // assume success
   var info = lookup(obj, path);
   
@@ -304,7 +324,7 @@ var unlink = function (path, cb) {
  * dst: the new path
  * cb: a callback of the form cb(err), where err is the Posix return code.
  */
-var rename = function (src, dst, cb) {
+function rename(src, dst, cb) {
   var err = -2; // -ENOENT assume failure
   var source = lookup(obj, src), dest;
   
@@ -326,9 +346,10 @@ var rename = function (src, dst, cb) {
 /*
  * Handler for the mkdir() system call.
  * path: the path of the new directory
+ * mode: the desired permissions of the new directory
  * cb: a callback of the form cb(err), where err is the Posix return code.
  */
-var mkdir = function (path, cb) {
+function mkdir(path, mode, cb) {
   var err = -2; // -ENOENT assume failure
   var dst = lookup(obj, path), dest;
   if (typeof dst.node === 'undefined' && dst.parent != null) {
@@ -345,7 +366,7 @@ var mkdir = function (path, cb) {
  * path: the path of the directory to remove
  * cb: a callback of the form cb(err), where err is the Posix return code.
  */
-var rmdir = function (path, cb) {
+function rmdir(path, cb) {
   var err = -2; // -ENOENT assume failure
   var dst = lookup(obj, path), dest;
   if (typeof dst.node === 'object' && dst.parent != null) {
@@ -361,7 +382,7 @@ var rmdir = function (path, cb) {
  * Handler for the init() FUSE hook. You can initialize your file system here.
  * cb: a callback to call when you're done initializing. It takes no arguments.
  */
-var init = function (cb) {
+function init(cb) {
   console.log("File system started at " + options.mountPoint);
   console.log("To stop it, type this in another shell: fusermount -u " + options.mountPoint);
   cb();
@@ -373,7 +394,7 @@ var init = function (cb) {
  * Handler for the destroy() FUSE hook. You can perform clean up tasks here.
  * cb: a callback to call when you're done. It takes no arguments.
  */
-var destroy = function (cb) {
+function destroy(cb) {
   if (options.outJson) {
     try {
       fs.writeFileSync(options.outJson, JSON.stringify(obj, null, '  '), 'utf8');
@@ -393,6 +414,7 @@ var handlers = {
   open: open,
   read: read,
   write: write,
+  release: release,
   create: create,
   unlink: unlink,
   rename: rename,

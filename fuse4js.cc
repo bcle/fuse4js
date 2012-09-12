@@ -66,6 +66,7 @@ enum fuseop_t {
   OP_OPEN,
   OP_READ,
   OP_WRITE,
+  OP_RELEASE,
   OP_CREATE,
   OP_UNLINK,
   OP_RENAME,
@@ -81,6 +82,7 @@ const char* fuseop_names[] = {
     "open",
     "read",
     "write",
+    "release",
     "create",
     "unlink",
     "rename",
@@ -93,6 +95,7 @@ const char* fuseop_names[] = {
 static struct {
   enum fuseop_t op;
   const char *in_path;
+  struct fuse_file_info *info;
   union {
     struct {
       struct stat *stbuf;
@@ -110,6 +113,9 @@ static struct {
     struct {
       const char *dst;
     } rename;
+    struct {
+      mode_t mode;
+    } create_mkdir;
   } u;
   int retval;
 } f4js_cmd;
@@ -145,8 +151,9 @@ static int f4js_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 // ---------------------------------------------------------------------------
 
-int f4js_open(const char *path, struct fuse_file_info *)
+int f4js_open(const char *path, struct fuse_file_info *info)
 {
+  f4js_cmd.info = info;
   return f4js_rpc(OP_OPEN, path);
 }
 
@@ -156,8 +163,9 @@ int f4js_read (const char *path,
                char *buf,
                size_t len,
                off_t offset,
-               struct fuse_file_info *)
+               struct fuse_file_info *info)
 {
+  f4js_cmd.info = info;
   f4js_cmd.u.rw.offset = offset;
   f4js_cmd.u.rw.len = len;
   f4js_cmd.u.rw.dstBuf = buf;
@@ -170,8 +178,9 @@ int f4js_write (const char *path,
                 const char *buf,
                 size_t len,
                 off_t offset,
-                struct fuse_file_info *)
+                struct fuse_file_info * info)
 {
+  f4js_cmd.info = info;
   f4js_cmd.u.rw.offset = offset;
   f4js_cmd.u.rw.len = len;
   f4js_cmd.u.rw.srcBuf = buf;
@@ -180,10 +189,20 @@ int f4js_write (const char *path,
 
 // ---------------------------------------------------------------------------
 
+int f4js_release (const char *path, struct fuse_file_info *info)
+{
+  f4js_cmd.info = info;
+  return f4js_rpc(OP_RELEASE, path);
+}
+
+// ---------------------------------------------------------------------------
+
 int f4js_create (const char *path,
                  mode_t mode,
-                 struct fuse_file_info *)
+                 struct fuse_file_info *info)
 {
+  f4js_cmd.info = info;
+  f4js_cmd.u.create_mkdir.mode = mode;
   return f4js_rpc(OP_CREATE, path);
 }
 
@@ -214,7 +233,7 @@ int f4js_rename (const char *src, const char *dst)
 
 int f4js_mkdir (const char *path, mode_t mode)
 {
-  // TODO: pass 'mode'
+  f4js_cmd.u.create_mkdir.mode = mode;
   return f4js_rpc(OP_MKDIR, path);
 }
 
@@ -252,6 +271,7 @@ void *fuse_thread(void *)
   ops.open = f4js_open;
   ops.read = f4js_read;
   ops.write = f4js_write;
+  ops.release = f4js_release;
   ops.create = f4js_create;
   ops.utimens = f4js_utimens;
   ops.unlink = f4js_unlink;
@@ -289,44 +309,51 @@ void ConvertDate(Handle<Object> &stat,
 
 // ---------------------------------------------------------------------------
 
-Handle<Value> GetAttrCompletion(const Arguments& args)
+void ProcessReturnValue(const Arguments& args)
 {
-  HandleScope scope;
   if (args.Length() >= 1 && args[0]->IsNumber()) {
     Local<Number> retval = Local<Number>::Cast(args[0]);
     f4js_cmd.retval = (int)retval->Value();
-    if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsObject()) {
-      memset(f4js_cmd.u.getattr.stbuf, 0, sizeof(*f4js_cmd.u.getattr.stbuf));
-      Handle<Object> stat = Handle<Object>::Cast(args[1]);
-      
-      Local<Value> prop = stat->Get(String::NewSymbol("size"));
-      if (!prop->IsUndefined() && prop->IsNumber()) {
-        Local<Number> num = Local<Number>::Cast(prop);
-        f4js_cmd.u.getattr.stbuf->st_size = (off_t)num->Value();
-      }
-      
-      prop = stat->Get(String::NewSymbol("mode"));
-      if (!prop->IsUndefined() && prop->IsNumber()) {
-        Local<Number> num = Local<Number>::Cast(prop);
-        f4js_cmd.u.getattr.stbuf->st_mode = (mode_t)num->Value();
-      }
-      
-      prop = stat->Get(String::NewSymbol("uid"));
-      if (!prop->IsUndefined() && prop->IsNumber()) {
-        Local<Number> num = Local<Number>::Cast(prop);
-        f4js_cmd.u.getattr.stbuf->st_uid = (uid_t)num->Value();
-      }
+  }  
+}
 
-      prop = stat->Get(String::NewSymbol("gid"));
-      if (!prop->IsUndefined() && prop->IsNumber()) {
-        Local<Number> num = Local<Number>::Cast(prop);
-        f4js_cmd.u.getattr.stbuf->st_gid = (gid_t)num->Value();
-      }
+// ---------------------------------------------------------------------------
 
-      ConvertDate(stat, "mtime", &f4js_cmd.u.getattr.stbuf->st_mtim);
-      ConvertDate(stat, "ctime", &f4js_cmd.u.getattr.stbuf->st_ctim);
-      ConvertDate(stat, "atime", &f4js_cmd.u.getattr.stbuf->st_atim);
+Handle<Value> GetAttrCompletion(const Arguments& args)
+{
+  HandleScope scope;
+  ProcessReturnValue(args);
+  if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsObject()) {
+    memset(f4js_cmd.u.getattr.stbuf, 0, sizeof(*f4js_cmd.u.getattr.stbuf));
+    Handle<Object> stat = Handle<Object>::Cast(args[1]);
+    
+    Local<Value> prop = stat->Get(String::NewSymbol("size"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.getattr.stbuf->st_size = (off_t)num->Value();
     }
+    
+    prop = stat->Get(String::NewSymbol("mode"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.getattr.stbuf->st_mode = (mode_t)num->Value();
+    }
+    
+    prop = stat->Get(String::NewSymbol("uid"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.getattr.stbuf->st_uid = (uid_t)num->Value();
+    }
+
+    prop = stat->Get(String::NewSymbol("gid"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.getattr.stbuf->st_gid = (gid_t)num->Value();
+    }
+
+    ConvertDate(stat, "mtime", &f4js_cmd.u.getattr.stbuf->st_mtim);
+    ConvertDate(stat, "ctime", &f4js_cmd.u.getattr.stbuf->st_ctim);
+    ConvertDate(stat, "atime", &f4js_cmd.u.getattr.stbuf->st_atim);
   }
   sem_post(&f4js.sem);  
   return scope.Close(Undefined());    
@@ -337,21 +364,18 @@ Handle<Value> GetAttrCompletion(const Arguments& args)
 Handle<Value> ReadDirCompletion(const Arguments& args)
 {
   HandleScope scope;
-  if (args.Length() >= 1 && args[0]->IsNumber()) {
-    Local<Number> retval = Local<Number>::Cast(args[0]);
-    f4js_cmd.retval = (int)retval->Value();
-    if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsArray()) {
-      Handle<Array> ar = Handle<Array>::Cast(args[1]);
-      for (uint32_t i = 0; i < ar->Length(); i++) {
-        Local<Value> el = ar->Get(i);
-        if (!el->IsUndefined() && el->IsString()) {
-          Local<String> name = Local<String>::Cast(el);
-          String::AsciiValue av(name);          
-          struct stat st;
-          memset(&st, 0, sizeof(st)); // structure not used. Zero everything.
-          if (f4js_cmd.u.readdir.filler(f4js_cmd.u.readdir.buf, *av, &st, 0))
-            break;            
-        }
+  ProcessReturnValue(args);
+  if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsArray()) {
+    Handle<Array> ar = Handle<Array>::Cast(args[1]);
+    for (uint32_t i = 0; i < ar->Length(); i++) {
+      Local<Value> el = ar->Get(i);
+      if (!el->IsUndefined() && el->IsString()) {
+        Local<String> name = Local<String>::Cast(el);
+        String::AsciiValue av(name);          
+        struct stat st;
+        memset(&st, 0, sizeof(st)); // structure not used. Zero everything.
+        if (f4js_cmd.u.readdir.filler(f4js_cmd.u.readdir.buf, *av, &st, 0))
+          break;            
       }
     }
   }
@@ -366,12 +390,8 @@ Handle<Value> GenericCompletion(const Arguments& args)
   HandleScope scope;
   bool exiting = (f4js_cmd.op == OP_DESTROY);
   
-  if (args.Length() >= 1 && args[0]->IsNumber()) {
-    Local<Number> retval = Local<Number>::Cast(args[0]);
-    f4js_cmd.retval = (int)retval->Value();    
-  }
-  sem_post(&f4js.sem);
-  
+  ProcessReturnValue(args);
+  sem_post(&f4js.sem);  
   if (exiting) {
     pthread_join(f4js.fuse_thread, NULL);
     uv_unref((uv_handle_t*) &f4js.async);    
@@ -381,19 +401,32 @@ Handle<Value> GenericCompletion(const Arguments& args)
 
 // ---------------------------------------------------------------------------
 
+Handle<Value> OpenCreateCompletion(const Arguments& args)
+{
+  HandleScope scope;
+  ProcessReturnValue(args);
+  if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsNumber()) {
+    Local<Number> fileHandle = Local<Number>::Cast(args[1]);
+    f4js_cmd.info->fh = (uint64_t)fileHandle->Value(); // save the file handle
+  } else {
+    f4js_cmd.info->fh = 0;
+  }
+  sem_post(&f4js.sem);  
+  return scope.Close(Undefined());    
+}
+
+// ---------------------------------------------------------------------------
+
 Handle<Value> ReadCompletion(const Arguments& args)
 {
   HandleScope scope;
-  if (args.Length() >= 1 && args[0]->IsNumber()) {
-    Local<Number> retval = Local<Number>::Cast(args[0]);
-    f4js_cmd.retval = (int)retval->Value();
-    if (f4js_cmd.retval >= 0) {
-      char *buffer_data = node::Buffer::Data(f4js.nodeBuffer);
-      if ((size_t)f4js_cmd.retval > f4js_cmd.u.rw.len) {
-        f4js_cmd.retval = f4js_cmd.u.rw.len;
-      }
-      memcpy(f4js_cmd.u.rw.dstBuf, buffer_data, f4js_cmd.retval);
+  ProcessReturnValue(args);    
+  if (f4js_cmd.retval >= 0) {
+    char *buffer_data = node::Buffer::Data(f4js.nodeBuffer);
+    if ((size_t)f4js_cmd.retval > f4js_cmd.u.rw.len) {
+      f4js_cmd.retval = f4js_cmd.u.rw.len;
     }
+    memcpy(f4js_cmd.u.rw.dstBuf, buffer_data, f4js_cmd.retval);
   }
   f4js.nodeBuffer.Dispose();
   sem_post(&f4js.sem);  
@@ -405,10 +438,7 @@ Handle<Value> ReadCompletion(const Arguments& args)
 Handle<Value> WriteCompletion(const Arguments& args)
 {
   HandleScope scope;
-  if (args.Length() >= 1 && args[0]->IsNumber()) {
-    Local<Number> retval = Local<Number>::Cast(args[0]);
-    f4js_cmd.retval = (int)retval->Value();
-  }
+  ProcessReturnValue(args);
   f4js.nodeBuffer.Dispose();
   sem_post(&f4js.sem);  
   return scope.Close(Undefined());    
@@ -424,10 +454,11 @@ static void DispatchOp(uv_async_t* handle, int status)
   Local<FunctionTemplate> tpl = FunctionTemplate::New(GenericCompletion); // default
   f4js_cmd.retval = -EPERM;
   int argc = 0;
-  Handle<Value> argv[5];  
+  Handle<Value> argv[6];  
   Local<String> path = String::New(f4js_cmd.in_path);  
   argv[argc++] = path;
   node::Buffer* buffer = NULL; // used for read/write operations
+  bool passInfo = false;
   
   switch (f4js_cmd.op) {
   
@@ -449,14 +480,34 @@ static void DispatchOp(uv_async_t* handle, int status)
     argv[argc++] = String::New(f4js_cmd.u.rename.dst);
     break;
 
+  case OP_OPEN:
+    tpl = FunctionTemplate::New(OpenCreateCompletion);
+    argv[argc++] = Number::New((double)f4js_cmd.info->flags);      
+    break;
+    
+  case OP_CREATE:
+    tpl = FunctionTemplate::New(OpenCreateCompletion);
+    argv[argc++] = Number::New((double)f4js_cmd.u.create_mkdir.mode);      
+    break;
+  
+  case OP_MKDIR:
+    argv[argc++] = Number::New((double)f4js_cmd.u.create_mkdir.mode);      
+    break;
+    
   case OP_READ:
     tpl = FunctionTemplate::New(ReadCompletion);
     buffer = node::Buffer::New(f4js_cmd.u.rw.len);
+    passInfo = true;
     break;
     
   case OP_WRITE:
     tpl = FunctionTemplate::New(WriteCompletion);   
     buffer = node::Buffer::New((char*)f4js_cmd.u.rw.srcBuf, f4js_cmd.u.rw.len);
+    passInfo = true;
+    break;
+    
+  case OP_RELEASE:
+    passInfo = true;
     break;
     
   default:
@@ -471,13 +522,14 @@ static void DispatchOp(uv_async_t* handle, int status)
     f4js.nodeBuffer = Persistent<Object>::New(buffer->handle_);   
     argv[argc++] = f4js.nodeBuffer;
   }
-  
+  if (passInfo) {
+    argv[argc++] = Number::New((double)f4js_cmd.info->fh); // optional file handle returned by open()
+  }
   Local<Function> handler = Local<Function>::Cast(f4js.handlers->Get(String::NewSymbol(symName.c_str())));
   if (handler->IsUndefined()) {
     sem_post(&f4js.sem);
     return;
   }
-  
   Local<Function> cb = tpl->GetFunction();
   std::string cbName = symName + "Completion";
   cb->SetName(String::NewSymbol(cbName.c_str()));

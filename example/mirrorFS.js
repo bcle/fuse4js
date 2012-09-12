@@ -32,22 +32,24 @@ var options = {};  // See parseArgs()
 
 /*
  * Convert a node.js file system exception to a numerical errno value.
- * This is necessary because the err.errno property appears to be wrong.
- * On the other hand, the err.code string seems like a correct representation of the error,
- * so we use that instead.
+ * This is necessary because node's exc.errno property appears to have wrong
+ * values based on experiments.
+ * On the other hand, the exc.code string seems like a correct representation
+ * of the error, so we use that instead.
  */
 
 var errnoMap = {
     EPERM: 1,
     ENOENT: 2,
+    EACCES: 13,    
     EINVAL: 22,
-    EACCESS: 13    
+    ENOTEMPTY: 39
 };
 
-function errToErrNo(err) {
-  errno = errnoMap[err.code];
+function excToErrno(exc) {
+  errno = errnoMap[exc.code];
   if (!errno)
-    errno = 2; // default to ENOENT
+    errno = errnoMap.EPERM; // default to EPERM
   return errno;
 }
 
@@ -59,12 +61,11 @@ function errToErrNo(err) {
  * cb: a callback of the form cb(err, stat), where err is the Posix return code
  *     and stat is the result in the form of a stat structure (when err === 0)
  */
-var getattr = function (path, cb) {	
-  
-  path = pth.join(srcRoot, path);
+function getattr(path, cb) {	  
+  var path = pth.join(srcRoot, path);
   return fs.lstat(path, function lstatCb(err, stats) {
     if (err)      
-      return cb(-errToErrNo(err));
+      return cb(-excToErrno(err));
     var millisecs = stats.mtime.getTime();
     return cb(0, stats);
   });
@@ -78,12 +79,11 @@ var getattr = function (path, cb) {
  * cb: a callback of the form cb(err, names), where err is the Posix return code
  *     and names is the result in the form of an array of file names (when err === 0).
  */
-var readdir = function (path, cb) {
-
-  path = pth.join(srcRoot, path);
+function readdir(path, cb) {
+  var path = pth.join(srcRoot, path);
   return fs.readdir(path, function readdirCb(err, files) {
     if (err)      
-      return cb(-errToErrNo(err));
+      return cb(-excToErrno(err));
     return cb(0, files);
   });
 }
@@ -91,18 +91,37 @@ var readdir = function (path, cb) {
 //---------------------------------------------------------------------------
 
 /*
+ * Converts numerical open() flags to node.js fs.open() 'flags' string.
+ */
+function convertOpenFlags(openFlags) {
+  switch (openFlags & 3) {
+  case 0:                    // O_RDONLY
+    return 'r';
+  case 1:
+    return 'w';              // O_WRONLY
+  case 2:
+    return 'r+';             // O_RDWR
+  }
+}
+
+//---------------------------------------------------------------------------
+
+/*
  * Handler for the open() system call.
  * path: the path to the file
- * cb: a callback of the form cb(err), where err is the Posix return code
+ * flags: requested access flags as documented in open(2)
+ * cb: a callback of the form cb(err, [fh]), where err is the Posix return code
+ *     and fh is an optional numerical file handle, which is passed to subsequent
+ *     read(), write(), and release() calls (set to 0 if fh is unspecified)
  */
-var open = function (path, cb) {
-  var err = 0; // assume success
-  var info = lookup(obj, path);
-  
-  if (typeof info.node === 'undefined') {
-    err = -ENOENT;
-  }
-  cb(err);
+function open(path, flags, cb) {
+  var path = pth.join(srcRoot, path);
+  var flags = convertOpenFlags(flags);
+  fs.open(path, flags, 0666, function openCb(err, fd) {
+    if (err)      
+      return cb(-excToErrno(err));
+    cb(0, fd);    
+  });
 }
 
 //---------------------------------------------------------------------------
@@ -113,41 +132,16 @@ var open = function (path, cb) {
  * offset: the file offset to read from
  * len: the number of bytes to read
  * buf: the Buffer to write the data to
+ * fh:  the optional file handle originally returned by open(), or 0 if it wasn't
  * cb: a callback of the form cb(err), where err is the Posix return code.
  *     A positive value represents the number of bytes actually read.
  */
-var read = function (path, offset, len, buf, cb) {
-  var err = 0; // assume success
-  var info = lookup(obj, path);
-  var file = info.node;
-  var maxBytes;
-  var data;
-  
-  switch (typeof file) {
-  case 'undefined':
-    err = -2; // -ENOENT
-    break;
-
-  case 'object': // directory
-    err = -1; // -EPERM
-    break;
-      
-  case 'string': // a string treated as ASCII characters
-    if (offset < file.length) {
-      maxBytes = file.length - offset;
-      if (len > maxBytes) {
-        len = maxBytes;
-      }
-      data = file.substring(offset, len);
-      buf.write(data, 0, len, 'ascii');
-      err = len;
-    }
-    break;
-  
-  default:
-    break;
-  }
-  cb(err);
+function read(path, offset, len, buf, fh, cb) {
+  fs.read(fh, buf, 0, len, offset, function readCb(err, bytesRead, buffer) {
+    if (err)      
+      return cb(-excToErrno(err));
+    cb(bytesRead);
+  });
 }
 
 //---------------------------------------------------------------------------
@@ -158,78 +152,51 @@ var read = function (path, offset, len, buf, cb) {
  * offset: the file offset to write to
  * len: the number of bytes to write
  * buf: the Buffer to read data from
+ * fh:  the optional file handle originally returned by open(), or 0 if it wasn't
  * cb: a callback of the form cb(err), where err is the Posix return code.
  *     A positive value represents the number of bytes actually written.
  */
-var write = function (path, offset, len, buf, cb) {
-  var err = 0; // assume success
-  var info = lookup(obj, path);
-  var file = info.node;
-  var name = info.name;
-  var parent = info.parent;
-  var beginning, blank = '', data, ending='', numBlankChars;
-  
-  switch (typeof file) {
-  case 'undefined':
-    err = -2; // -ENOENT
-    break;
+function write(path, offset, len, buf, fh, cb) {
+  fs.write(fh, buf, 0, len, offset, function writeCb(err, bytesWritten, buffer) {
+    if (err)      
+      return cb(-excToErrno(err));
+    cb(bytesWritten);
+  });
+}
 
-  case 'object': // directory
-    err = -1; // -EPERM
-    break;
-      
-  case 'string': // a string treated as ASCII characters
-    data = buf.toString('ascii'); // read the new data
-    if (offset < file.length) {
-      beginning = file.substring(0, offset);
-      if (offset + data.length < file.length) {
-        ending = file.substring(offset + data.length, file.length)
-      }
-    } else {
-      beginning = file;
-      numBlankChars = offset - file.length;
-      while (numBlankChars--) blank += ' ';
-    }
-    delete parent[name];
-    parent[name] = beginning + blank + data + ending;
-    err = data.length;
-    break;
-  
-  default:
-    break;
-  }
-  cb(err);
+//---------------------------------------------------------------------------
+
+/*
+ * Handler for the release() system call.
+ * path: the path to the file
+ * fh:  the optional file handle originally returned by open(), or 0 if it wasn't
+ * cb: a callback of the form cb(err), where err is the Posix return code.
+ */
+function release(path, fh, cb) {
+  fs.close(fh, function closeCb(err) {
+    if (err)      
+      return cb(-excToErrno(err));
+    cb(0);
+  });
 }
 
 //---------------------------------------------------------------------------
 
 /*
  * Handler for the create() system call.
- * path: the path to the file
- * cb: a callback of the form cb(err), where err is the Posix return code.
+ * path: the path of the new file
+ * mode: the desired permissions of the new file
+ * cb: a callback of the form cb(err, [fh]), where err is the Posix return code
+ *     and fh is an optional numerical file handle, which is passed to subsequent
+ *     read(), write(), and release() calls (it's set to 0 if fh is unspecified)
  */
-var create = function (path, cb) {
-  var err = 0; // assume success
-  var info = lookup(obj, path);
-  
-  switch (typeof info.node) {
-  case 'undefined':
-    if (info.parent !== null) {
-      info.parent[info.name] = '';
-    } else {
-      err = -2; // -ENOENT      
-    }
-    break;
-
-  case 'string': // existing file
-  case 'object': // existing directory
-    err = -17; // -EEXIST
-    break;
-      
-  default:
-    break;
-  }
-  cb(err);
+function create (path, mode, cb) {
+  var path = pth.join(srcRoot, path);
+  fs.open(path, 'w', mode, function openCb(err, fd) {
+    if (err)      
+      return cb(-excToErrno(err));
+    cb(0, fd);    
+  });
 }
 
 //---------------------------------------------------------------------------
@@ -239,27 +206,13 @@ var create = function (path, cb) {
  * path: the path to the file
  * cb: a callback of the form cb(err), where err is the Posix return code.
  */
-var unlink = function (path, cb) {
-  var err = 0; // assume success
-  var info = lookup(obj, path);
-  
-  switch (typeof info.node) {
-  case 'undefined':
-    err = -2; // -ENOENT      
-    break;
-
-  case 'object': // existing directory
-    err = -1; // -EPERM
-    break;
-
-  case 'string': // existing file
-    delete info.parent[info.name];
-    break;
-    
-  default:
-    break;
-  }
-  cb(err);
+function unlink(path, cb) {
+  var path = pth.join(srcRoot, path);
+  fs.unlink(path, function unlinkCb(err) {
+    if (err)      
+      return cb(-excToErrno(err));
+    cb(0);
+  });
 }
 
 //---------------------------------------------------------------------------
@@ -270,21 +223,14 @@ var unlink = function (path, cb) {
  * dst: the new path
  * cb: a callback of the form cb(err), where err is the Posix return code.
  */
-var rename = function (src, dst, cb) {
-  var err = -2; // -ENOENT assume failure
-  var source = lookup(obj, src), dest;
-  
-  if (typeof source.node !== 'undefined') { // existing file or directory
-    dest = lookup(obj, dst);
-    if (typeof dest.node === 'undefined' && dest.parent !== null) {
-      dest.parent[dest.name] = source.node;
-      delete source.parent[source.name];
-      err = 0;
-    } else {
-      err = -17; // -EEXIST
-    }
-  }   
-  cb(err);
+function rename(src, dst, cb) {
+  src = pth.join(srcRoot, src);
+  dst = pth.join(srcRoot, dst);
+  fs.rename(src, dst, function renameCb(err) {
+    if (err)      
+      return cb(-excToErrno(err));
+    cb(0);
+  });
 }
 
 //---------------------------------------------------------------------------
@@ -292,16 +238,16 @@ var rename = function (src, dst, cb) {
 /*
  * Handler for the mkdir() system call.
  * path: the path of the new directory
+ * mode: the desired permissions of the new directory
  * cb: a callback of the form cb(err), where err is the Posix return code.
  */
-var mkdir = function (path, cb) {
-  var err = -2; // -ENOENT assume failure
-  var dst = lookup(obj, path), dest;
-  if (typeof dst.node === 'undefined' && dst.parent != null) {
-    dst.parent[dst.name] = {};
-    err = 0;
-  }
-  cb(err);
+function mkdir(path, mode, cb) {
+  var path = pth.join(srcRoot, path);
+  fs.mkdir(path, mode, function mkdirCb(err) {
+    if (err)      
+      return cb(-excToErrno(err));
+    cb(0);
+  });
 }
 
 //---------------------------------------------------------------------------
@@ -311,14 +257,14 @@ var mkdir = function (path, cb) {
  * path: the path of the directory to remove
  * cb: a callback of the form cb(err), where err is the Posix return code.
  */
-var rmdir = function (path, cb) {
-  var err = -2; // -ENOENT assume failure
-  var dst = lookup(obj, path), dest;
-  if (typeof dst.node === 'object' && dst.parent != null) {
-    delete dst.parent[dst.name];
-    err = 0;
-  }
-  cb(err);
+function rmdir(path, cb) {
+  var path = pth.join(srcRoot, path);
+  fs.rmdir(path, function rmdirCb(err) {
+    if (err)      
+      return cb(-excToErrno(err));
+    cb(0);
+  });
+
 }
 
 //---------------------------------------------------------------------------
@@ -359,6 +305,7 @@ var handlers = {
   open: open,
   read: read,
   write: write,
+  release: release,
   create: create,
   unlink: unlink,
   rename: rename,
