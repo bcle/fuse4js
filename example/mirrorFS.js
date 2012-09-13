@@ -20,7 +20,6 @@
  * 
  */
 
-// var f4js = require('../build/Debug/fuse4js.node');
 var f4js = require('fuse4js');
 var fs = require('fs');
 var pth = require('path');

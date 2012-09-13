@@ -17,7 +17,7 @@ Requirements
 Tutorial
 --------
 
-This tutorial explains how to install and use Fuse4js.
+This tutorial explains how to install and use fuse4js.
 
 * Ensure your system meets the software requirements listed above.
 * Create a /tmp/tutorial directory.
@@ -33,8 +33,8 @@ This mounts the JSON file as a file system. In a another shell, you can browse a
 `fusermount -u /tmp/tutorial/mnt`
 * Changes to the file system are discarded. If you want to save the modified data to a new JSON file, add the `-o outputJsonFilePath` option when starting the program.
 
-Once you are comfortable with the sample program, you can move on to the second example, mirrorFS.js. It is equivalent to the fusexmp.c sample program that ships with the FUSE source code. As its name indicates, it mirrors an existing file system on a mount point of your choice. It demonstrates more advanced features such as file handles. The syntax is:
-`node fuse4js/example/mirrorFS.js <file_system_root> <new_mount_point>`
+Once you are comfortable with the sample program, you can move on to the second example, *mirrorFS.js*. It is equivalent to the fusexmp.c sample program that ships with the FUSE source code. As its name indicates, it maps an existing file system subtree to a mount point of your choice. It demonstrates more advanced features such as file handles. The syntax is:
+`node fuse4js/example/mirrorFS.js <file_system_directory> <new_mount_point>`
 
 
 Global installation
@@ -72,14 +72,14 @@ Since fuse4js dynamically links with your system's FUSE library, which is a comp
 
 Contributing
 ------------
-You are free to fork and modify this software in your own repositories. If you wish to submit code changes to this repository, you will be asked to digitally sign a contribution agreement, a legal document to be provided by VMware, Inc. 
+If you wish to submit code changes to this repository, please request a contribution agreement form from the author (VMware legal requires it).
 
 Contact
 -------
-Bug reports and constructive feedback is welcome by sending email to the author.  
+Feel free to send bug reports and constructive feedback to the author:  
 
 Bich C. Le  
 VMware, Inc.  
-Public email: bcle00@gmail.com  
-Company email: leb@vmware.com  
+Personal email: bcle00@gmail.com  
+Company email:  leb@vmware.com  
 
