@@ -7,7 +7,7 @@
     "type": "git",
     "url": "git://github.com/bcle/fuse4js.git"
   },
-  "homepage": "http://github.com/bcle/fuse4js",
+  "homepage": "https://github.com/bcle/fuse4js",
   "keywords": [
     "fuse",
     "filesystem"
