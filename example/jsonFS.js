@@ -19,8 +19,8 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  * 
  */
-var f4js = require('../build/Debug/fuse4js.node');
-//  var f4js = require('fuse4js');
+//  var f4js = require('../build/Debug/fuse4js.node');
+var f4js = require('fuse4js');
 var fs = require('fs');
 var obj = null;   // The JSON object we'll be exposing as a file system
 var options = {};  // See parseArgs()

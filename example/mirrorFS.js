@@ -20,8 +20,8 @@
  * 
  */
 
-// var f4js = require('fuse4js');
-var f4js = require('../build/Debug/fuse4js.node');
+// var f4js = require('../build/Debug/fuse4js.node');
+var f4js = require('fuse4js');
 var fs = require('fs');
 var pth = require('path');
 var srcRoot = '/';   // The root of the file system we are mirroring
@@ -66,7 +66,6 @@ function getattr(path, cb) {
   return fs.lstat(path, function lstatCb(err, stats) {
     if (err)      
       return cb(-excToErrno(err));
-    var millisecs = stats.mtime.getTime();
     return cb(0, stats);
   });
 };
@@ -95,8 +94,8 @@ function readdir(path, cb) {
  */
 function convertOpenFlags(openFlags) {
   switch (openFlags & 3) {
-  case 0:                    // O_RDONLY
-    return 'r';
+  case 0:                    
+    return 'r';              // O_RDONLY
   case 1:
     return 'w';              // O_WRONLY
   case 2:
