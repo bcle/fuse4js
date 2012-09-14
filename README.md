@@ -23,8 +23,9 @@ This tutorial explains how to install and use fuse4js.
 * Create a /tmp/tutorial directory.
 * cd to the directory you created.
 * Create a mnt/ subdirectory. It will be used as the mount point for testing FUSE file systems.
-* Download (using git or other means) the fuse4js source code into the fuse4js/ subdirectory.
-* Compile the source code and create the fuse4js add-on in the node_modules/ subdirectory:  
+* Download the fuse4js/ source directory:
+`git clone git://github.com/bcle/fuse4js.git`
+* Compile the source code to create the fuse4js add-on in a local node_modules/ subdirectory:  
 `npm install fuse4js`
 * Run the sample jsonFS file system:  
 `node fuse4js/example/jsonFS.js fuse4js/example/sample.json /tmp/tutorial/mnt`  
@@ -45,7 +46,8 @@ The tutorial used a local installation of fuse4js that is private to the /tmp/tu
 * Download the source code into a `fuse4js/` subdirectory
 * Install by typing: `npm install -g --unsafe-perm fuse4js`  
 The `--unsafe-perm` option seems to be necessary to work around an interference between the node-gyp compilation process and npm's downgrading of permissions when running a package's installation script (you may get an EACCES error without it)
-* At this point, the add-on should be installed under `/usr/local/lib/node_modules`. To use it in your programs using a statement such as `fuse4js = require("fuse4js")`, include `/usr/local/lib/node_modules` in your NODE_PATH environment variable. By default, node.js doesn't look in there for some reason, despite the fact that npm uses that directory as the default global installation location.
+* At this point, the add-on should be installed under `/usr/local/lib/node_modules`. To use it in your programs using a statement such as `fuse4js = require("fuse4js")`, include `/usr/local/lib/node_modules` in your NODE_PATH environment variable. By default, node.js doesn't look in there for some reason, despite the fact that npm uses that directory as the default global installation location. Example:
+`export NODE_PATH=/usr/local/lib/node_modules`
 
 API Documentation
 ----------------- 
@@ -80,6 +82,6 @@ Feel free to send bug reports and constructive feedback to the author:
 
 Bich C. Le  
 VMware, Inc.  
-Personal email: bcle00@gmail.com  
-Company email:  leb@vmware.com  
+Primary email: bcle00@gmail.com  
+Work email: leb@vmware.com  
 
