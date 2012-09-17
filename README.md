@@ -55,6 +55,7 @@ As of September 17, 2012, fuse4js has been added to the NPM registry, so you can
 `npm install fuse4js`  
 This will put the module under a local node_modules/ subdirectory.
 
+API Documentation
 ----------------- 
 Fuse4js currently implements a subset of all FUSE file operations. More will be added over time, but the initial set is sufficient to implement a basic read/write file system.
 
