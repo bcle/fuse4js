@@ -49,7 +49,12 @@ The `--unsafe-perm` option seems to be necessary to work around an interference 
 * At this point, the add-on should be installed under `/usr/local/lib/node_modules`. To use it in your programs using a statement such as `fuse4js = require("fuse4js")`, include `/usr/local/lib/node_modules` in your NODE_PATH environment variable. By default, node.js doesn't look in there for some reason, despite the fact that npm uses that directory as the default global installation location. Example:
 `export NODE_PATH=/usr/local/lib/node_modules`
 
-API Documentation
+Installation from NPM registry
+-------------------
+As of September 17, 2012, fuse4js has been added to the NPM registry, so you can skip the git download step and install it directly by typing:  
+`npm install fuse4js`  
+This will put the module under a local node_modules/ subdirectory.
+
 ----------------- 
 Fuse4js currently implements a subset of all FUSE file operations. More will be added over time, but the initial set is sufficient to implement a basic read/write file system.
 
