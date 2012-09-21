@@ -1,7 +1,10 @@
 {
   "name": "fuse4js",
   "version": "0.1.0",
-  "author": "Bich Le <bcle00@gmail.com>",
+  "author": {
+    "name": "Bich C. Le",
+    "email": "bcle00@gmail.com"
+  },
   "description": "FUSE bindings for node.js",
   "repository": {
     "type": "git",
@@ -10,7 +13,8 @@
   "homepage": "https://github.com/bcle/fuse4js",
   "keywords": [
     "fuse",
-    "filesystem"
+    "filesystem",
+    "file system"
   ],
   "engines": {
     "node": ">=0.8.6"
@@ -22,5 +26,6 @@
     "install": "node-gyp rebuild"
   },
   "devDependencies": {},
-  "optionalDependencies": {}
+  "optionalDependencies": {},
+  "readme": "# Fuse4js\nThis native add-on supplies bindings to the [FUSE subsystem](http://fuse.sourceforge.net/). It allows you to write user-space file systems in Javascript. For more information, please see the [README from the github page](https://github.com/bcle/fuse4js#readme)\n"
 }
