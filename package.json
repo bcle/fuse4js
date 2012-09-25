@@ -1,14 +1,14 @@
 {
-  "name": "fuse4js",
+  "name": "fuse4js-readlink",
   "version": "0.1.0",
   "author": {
     "name": "Bich C. Le",
     "email": "bcle00@gmail.com"
   },
-  "description": "FUSE bindings for node.js",
+  "description": "FUSE bindings for node.js - experimental fork with readlink support",
   "repository": {
     "type": "git",
-    "url": "git://github.com/bcle/fuse4js.git"
+    "url": "git://github.com/sidorares/fuse4js.git"
   },
   "homepage": "https://github.com/bcle/fuse4js",
   "keywords": [
