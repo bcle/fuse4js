@@ -80,14 +80,9 @@ Since fuse4js dynamically links with your system's FUSE library, which is a comp
 
 Contributing
 ------------
-If you wish to submit code changes to this repository, please request a contribution agreement form from the author (VMware legal requires it).
+If you wish to submit code changes to this repository, please request a contribution agreement form from the maintainer (VMware legal requires it).
 
 Contact
 -------
-Feel free to send bug reports and constructive feedback to the author:  
-
-Bich C. Le  
-VMware, Inc.  
-Primary email: bcle00@gmail.com  
-Work email: leb@vmware.com  
+Feel free to send bug reports and constructive feedback to the maintainer: fuse4js@vmware.com  
 
