@@ -369,9 +369,9 @@ Handle<Value> GetAttrCompletion(const Arguments& args)
       f4js_cmd.u.getattr.stbuf->st_gid = (gid_t)num->Value();
     }
 
-    ConvertDate(stat, "mtime", &f4js_cmd.u.getattr.stbuf->st_mtim);
-    ConvertDate(stat, "ctime", &f4js_cmd.u.getattr.stbuf->st_ctim);
-    ConvertDate(stat, "atime", &f4js_cmd.u.getattr.stbuf->st_atim);
+    //ConvertDate(stat, "mtime", &f4js_cmd.u.getattr.stbuf->st_mtim);
+    //ConvertDate(stat, "ctime", &f4js_cmd.u.getattr.stbuf->st_ctim);
+    //ConvertDate(stat, "atime", &f4js_cmd.u.getattr.stbuf->st_atim);
   }
   sem_post(&f4js.sem);  
   return scope.Close(Undefined());    
@@ -608,9 +608,11 @@ Handle<Value> Start(const Arguments& args)
   sem_init(&f4js.sem, 0, 0);
   uv_async_init(uv_default_loop(), &f4js.async, DispatchOp);
 
+  printf("starting FUSE");
   pthread_attr_t attr;
   pthread_attr_init(&attr);
   pthread_create(&f4js.fuse_thread, &attr, fuse_thread, NULL);
+  printf("FUSE started");
   return scope.Close(String::New("dummy"));
 }
 
@@ -618,6 +620,7 @@ Handle<Value> Start(const Arguments& args)
 
 void init(Handle<Object> target)
 {
+  printf("init called");
   target->Set(String::NewSymbol("start"), FunctionTemplate::New(Start)->GetFunction());
 }
 
