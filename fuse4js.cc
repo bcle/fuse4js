@@ -409,7 +409,7 @@ Handle<Value> ReadLinkCompletion(const Arguments& args)
   ProcessReturnValue(args);
   if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsString()) {
     String::AsciiValue av(args[1]);
-    size_t len = std::min((size_t)av.length()+1, f4js_cmd.u.readlink.len);
+    size_t len = std::min((size_t)av.length() + 1, f4js_cmd.u.readlink.len);
     strncpy(f4js_cmd.u.readlink.dstBuf, *av, len);
   }
   sem_post(&f4js.sem);  
