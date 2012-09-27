@@ -63,6 +63,7 @@ static struct {
 enum fuseop_t {  
   OP_GETATTR = 0,
   OP_READDIR,
+  OP_READLINK,
   OP_OPEN,
   OP_READ,
   OP_WRITE,
@@ -79,6 +80,7 @@ enum fuseop_t {
 const char* fuseop_names[] = {
     "getattr",
     "readdir",
+    "readlink",
     "open",
     "read",
     "write",
@@ -105,6 +107,10 @@ static struct {
       fuse_fill_dir_t filler;
     } readdir;
     struct {
+      char *dstBuf;
+      size_t len;
+    } readlink;
+   struct {
       off_t offset;
       size_t len;
       char *dstBuf;
@@ -148,6 +154,17 @@ static int f4js_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   f4js_cmd.u.readdir.filler = filler;
   return f4js_rpc(OP_READDIR, path);
 }
+
+// ---------------------------------------------------------------------------
+
+static int f4js_readlink(const char *path, char *buf, size_t len)
+{
+
+  f4js_cmd.u.readlink.dstBuf = buf;
+  f4js_cmd.u.readlink.len = len;
+  return f4js_rpc(OP_READLINK, path);
+}
+
 
 // ---------------------------------------------------------------------------
 
@@ -268,6 +285,7 @@ void *fuse_thread(void *)
   struct fuse_operations ops = { 0 };
   ops.getattr = f4js_getattr;
   ops.readdir = f4js_readdir;
+  ops.readlink = f4js_readlink;
   ops.open = f4js_open;
   ops.read = f4js_read;
   ops.write = f4js_write;
@@ -385,6 +403,23 @@ Handle<Value> ReadDirCompletion(const Arguments& args)
 
 // ---------------------------------------------------------------------------
 
+Handle<Value> ReadLinkCompletion(const Arguments& args)
+{
+  HandleScope scope;
+  ProcessReturnValue(args);
+  if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsString()) {
+    String::AsciiValue av(args[1]);
+    size_t len = std::min((size_t)av.length() + 1, f4js_cmd.u.readlink.len);
+    strncpy(f4js_cmd.u.readlink.dstBuf, *av, len);
+    // terminate string even when it is truncated
+    f4js_cmd.u.readlink.dstBuf[f4js_cmd.u.readlink.len - 1] = '\0';
+  }
+  sem_post(&f4js.sem);  
+  return scope.Close(Undefined());    
+}
+
+// ---------------------------------------------------------------------------
+
 Handle<Value> GenericCompletion(const Arguments& args)
 {
   HandleScope scope;
@@ -474,6 +509,10 @@ static void DispatchOp(uv_async_t* handle, int status)
   
   case OP_READDIR:
     tpl = FunctionTemplate::New(ReadDirCompletion);
+    break;
+  
+  case OP_READLINK:
+    tpl = FunctionTemplate::New(ReadLinkCompletion);
     break;
   
   case OP_RENAME:

@@ -89,6 +89,24 @@ function readdir(path, cb) {
 //---------------------------------------------------------------------------
 
 /*
+ * Handler for the readlink() system call.
+ * path: the path to the file
+ * cb: a callback of the form cb(err, name), where err is the Posix return code
+ *     and name is symlink target (when err === 0).
+ */
+function readlink(path, cb) {
+  var path = pth.join(srcRoot, path);
+  return fs.readlink(path, function readlinkCb(err, name) {
+    if (err)      
+      return cb(-excToErrno(err));
+    return cb(0, name);
+  });
+}
+
+
+//---------------------------------------------------------------------------
+
+/*
  * Converts numerical open() flags to node.js fs.open() 'flags' string.
  */
 function convertOpenFlags(openFlags) {
@@ -300,6 +318,7 @@ var destroy = function (cb) {
 var handlers = {
   getattr: getattr,
   readdir: readdir,
+  readlink: readlink,
   open: open,
   read: read,
   write: write,
