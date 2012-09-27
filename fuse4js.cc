@@ -411,6 +411,8 @@ Handle<Value> ReadLinkCompletion(const Arguments& args)
     String::AsciiValue av(args[1]);
     size_t len = std::min((size_t)av.length() + 1, f4js_cmd.u.readlink.len);
     strncpy(f4js_cmd.u.readlink.dstBuf, *av, len);
+    // terminate string even when it is truncated
+    f4js_cmd.u.readlink.dstBuf[f4js_cmd.u.readlink.len - 1] = '\0';
   }
   sem_post(&f4js.sem);  
   return scope.Close(Undefined());    
