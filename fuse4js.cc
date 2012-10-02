@@ -129,6 +129,13 @@ static struct {
 
 // ---------------------------------------------------------------------------
 
+std::string f4js_semaphore_path()
+{
+   return std::string("/fuse4js") + f4js.root;
+}
+
+// ---------------------------------------------------------------------------
+
 static int f4js_rpc(enum fuseop_t op, const char *path)
 {
   f4js_cmd.op = op;
@@ -428,8 +435,9 @@ Handle<Value> GenericCompletion(const Arguments& args)
   sem_post(f4js.psem);  
   if (exiting) {
     pthread_join(f4js.fuse_thread, NULL);
+    uv_unref((uv_handle_t*) &f4js.async);
     sem_close(f4js.psem);
-    uv_unref((uv_handle_t*) &f4js.async);    
+    sem_unlink(f4js_semaphore_path().c_str());    
   }
   return scope.Close(Undefined());    
 }
@@ -606,11 +614,11 @@ Handle<Value> Start(const Arguments& args)
   
   f4js.root = root;
   f4js.handlers = Persistent<Object>::New(Local<Object>::Cast(args[1]));
-
-  f4js.psem = sem_open("/fuse4jssemaphore", O_CREAT, S_IRUSR | S_IWUSR, 0);
+  f4js.psem = sem_open(f4js_semaphore_path().c_str(), O_CREAT, S_IRUSR | S_IWUSR, 0);
   if (f4js.psem == SEM_FAILED)
   {
-     std::cout << "semaphore creation failed!!!\n";
+     std::cerr << "Error: semaphore creation failed - " << strerror(errno) << "\n";
+     exit(-1);
   }
  
   uv_async_init(uv_default_loop(), &f4js.async, DispatchOp);
