@@ -15,7 +15,7 @@ Linux:
 * pkg-config tool (typically included out-of-the-box with the OS)
 * node.js 0.8.7 or later
 
-OSX
+OSX:
 * install [osxfuse](http://osxfuse.github.com/)
 
 Tutorial
