@@ -132,7 +132,7 @@ static struct {
 
 std::string f4js_semaphore_path()
 {
-   return std::string("/fuse4js") + f4js.root;
+   return std::string("fuse4js");// + f4js.root; // apperently on linux this can't be path name
 }
 
 // ---------------------------------------------------------------------------
