@@ -623,7 +623,6 @@ Handle<Value> Start(const Arguments& args)
   
   f4js.root = root;
   f4js.handlers = Persistent<Object>::New(Local<Object>::Cast(args[1]));
-
   f4js.psem = sem_open(f4js_semaphore_path().c_str(), O_CREAT, S_IRUSR | S_IWUSR, 0);
   if (f4js.psem == SEM_FAILED)
   {
