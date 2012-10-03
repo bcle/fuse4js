@@ -333,6 +333,7 @@ void ConvertDate(Handle<Object> &stat,
   }  
 }
 
+
 // ---------------------------------------------------------------------------
 
 void ProcessReturnValue(const Arguments& args)
@@ -377,9 +378,17 @@ Handle<Value> GetAttrCompletion(const Arguments& args)
       f4js_cmd.u.getattr.stbuf->st_gid = (gid_t)num->Value();
     }
 
-    //ConvertDate(stat, "mtime", &f4js_cmd.u.getattr.stbuf->st_mtim);
-    //ConvertDate(stat, "ctime", &f4js_cmd.u.getattr.stbuf->st_ctim);
-    //ConvertDate(stat, "atime", &f4js_cmd.u.getattr.stbuf->st_atim);
+    struct stat *stbuf = f4js_cmd.u.getattr.stbuf;
+#ifdef __APPLE__
+    ConvertDate(stat, "mtime", &stbuf->st_mtimespec);
+    ConvertDate(stat, "ctime", &stbuf->st_ctimespec);
+    ConvertDate(stat, "atime", &stbuf->st_atimespec);
+#else
+    ConvertDate(stat, "mtime", &stbuf->st_mtim);
+    ConvertDate(stat, "ctime", &stubf->st_ctim);
+    ConvertDate(stat, "atime", &stbuf->st_atim);
+#endif
+
   }
   sem_post(f4js.psem);  
   return scope.Close(Undefined());    
