@@ -46,6 +46,7 @@
 #include <semaphore.h>
 #include <string>
 #include <iostream>
+#include <stdlib.h>
 
 using namespace v8;
 
