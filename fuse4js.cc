@@ -385,7 +385,7 @@ Handle<Value> GetAttrCompletion(const Arguments& args)
     ConvertDate(stat, "atime", &stbuf->st_atimespec);
 #else
     ConvertDate(stat, "mtime", &stbuf->st_mtim);
-    ConvertDate(stat, "ctime", &stubf->st_ctim);
+    ConvertDate(stat, "ctime", &stbuf->st_ctim);
     ConvertDate(stat, "atime", &stbuf->st_atim);
 #endif
 
