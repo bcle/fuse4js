@@ -5,7 +5,8 @@ Fuse4js provides Javascript bindings to the [FUSE](http://fuse.sourceforge.net/)
 
 Requirements
 ------------
-* Linux. Fuse4js has been tested on Ubuntu 10.04, Ubuntu 12.04  and CentOS 5.x (all 32-bit).
+Linux:
+* Fuse4js has been tested on Ubuntu 10.04, Ubuntu 12.04  and CentOS 5.x (all 32-bit).
 * GNU Compiler toolchain, including gcc and g++
     * On Ubuntu: `sudo apt-get install g++`
 * FUSE library and header files.
@@ -13,6 +14,9 @@ Requirements
     * On CentOS / RedHat: `yum install fuse-devel`
 * pkg-config tool (typically included out-of-the-box with the OS)
 * node.js 0.8.7 or later
+
+OSX:
+* install [osxfuse](http://osxfuse.github.com/)
 
 Tutorial
 --------
@@ -70,9 +74,9 @@ The FUSE event loop runs in its own thread, and communicates with the node.js ma
 ToDo List
 ---------
 * Automated tests
-* Support for more FUSE operations, such as hard and symbolic link management.
+* Support for more FUSE operations, such as hard link management.
 * Improve performance (try to reduce context switches and copy operations)
-* Mac Port?
+
 
 License
 -------

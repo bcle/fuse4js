@@ -45,6 +45,9 @@
 #include <fuse.h>
 #include <semaphore.h>
 #include <string>
+#include <iostream>
+#include <sstream>
+#include <stdlib.h>
 
 using namespace v8;
 
@@ -53,7 +56,7 @@ using namespace v8;
 static struct {
   bool enableFuseDebug;
   uv_async_t async;
-  sem_t sem;
+  sem_t *psem;
   pthread_t fuse_thread;
   std::string root;
   Persistent<Object> handlers;
@@ -128,12 +131,21 @@ static struct {
 
 // ---------------------------------------------------------------------------
 
+std::string f4js_semaphore_name()
+{
+   std::ostringstream o;
+   o << "fuse4js" << getpid();
+   return o.str();
+}
+
+// ---------------------------------------------------------------------------
+
 static int f4js_rpc(enum fuseop_t op, const char *path)
 {
   f4js_cmd.op = op;
   f4js_cmd.in_path = path;
   uv_async_send(&f4js.async);
-  sem_wait(&f4js.sem);
+  sem_wait(f4js.psem);
   return f4js_cmd.retval;  
 }
 
@@ -325,6 +337,7 @@ void ConvertDate(Handle<Object> &stat,
   }  
 }
 
+
 // ---------------------------------------------------------------------------
 
 void ProcessReturnValue(const Arguments& args)
@@ -369,11 +382,19 @@ Handle<Value> GetAttrCompletion(const Arguments& args)
       f4js_cmd.u.getattr.stbuf->st_gid = (gid_t)num->Value();
     }
 
-    ConvertDate(stat, "mtime", &f4js_cmd.u.getattr.stbuf->st_mtim);
-    ConvertDate(stat, "ctime", &f4js_cmd.u.getattr.stbuf->st_ctim);
-    ConvertDate(stat, "atime", &f4js_cmd.u.getattr.stbuf->st_atim);
+    struct stat *stbuf = f4js_cmd.u.getattr.stbuf;
+#ifdef __APPLE__
+    ConvertDate(stat, "mtime", &stbuf->st_mtimespec);
+    ConvertDate(stat, "ctime", &stbuf->st_ctimespec);
+    ConvertDate(stat, "atime", &stbuf->st_atimespec);
+#else
+    ConvertDate(stat, "mtime", &stbuf->st_mtim);
+    ConvertDate(stat, "ctime", &stbuf->st_ctim);
+    ConvertDate(stat, "atime", &stbuf->st_atim);
+#endif
+
   }
-  sem_post(&f4js.sem);  
+  sem_post(f4js.psem);  
   return scope.Close(Undefined());    
 }
 
@@ -389,7 +410,7 @@ Handle<Value> ReadDirCompletion(const Arguments& args)
       Local<Value> el = ar->Get(i);
       if (!el->IsUndefined() && el->IsString()) {
         Local<String> name = Local<String>::Cast(el);
-        String::AsciiValue av(name);          
+        String::AsciiValue av(name);  
         struct stat st;
         memset(&st, 0, sizeof(st)); // structure not used. Zero everything.
         if (f4js_cmd.u.readdir.filler(f4js_cmd.u.readdir.buf, *av, &st, 0))
@@ -397,7 +418,7 @@ Handle<Value> ReadDirCompletion(const Arguments& args)
       }
     }
   }
-  sem_post(&f4js.sem);  
+  sem_post(f4js.psem);  
   return scope.Close(Undefined());    
 }
 
@@ -414,7 +435,7 @@ Handle<Value> ReadLinkCompletion(const Arguments& args)
     // terminate string even when it is truncated
     f4js_cmd.u.readlink.dstBuf[f4js_cmd.u.readlink.len - 1] = '\0';
   }
-  sem_post(&f4js.sem);  
+  sem_post(f4js.psem);  
   return scope.Close(Undefined());    
 }
 
@@ -426,10 +447,12 @@ Handle<Value> GenericCompletion(const Arguments& args)
   bool exiting = (f4js_cmd.op == OP_DESTROY);
   
   ProcessReturnValue(args);
-  sem_post(&f4js.sem);  
+  sem_post(f4js.psem);  
   if (exiting) {
     pthread_join(f4js.fuse_thread, NULL);
-    uv_unref((uv_handle_t*) &f4js.async);    
+    uv_unref((uv_handle_t*) &f4js.async);
+    sem_close(f4js.psem);
+    sem_unlink(f4js_semaphore_name().c_str());    
   }
   return scope.Close(Undefined());    
 }
@@ -446,7 +469,7 @@ Handle<Value> OpenCreateCompletion(const Arguments& args)
   } else {
     f4js_cmd.info->fh = 0;
   }
-  sem_post(&f4js.sem);  
+  sem_post(f4js.psem);  
   return scope.Close(Undefined());    
 }
 
@@ -464,7 +487,7 @@ Handle<Value> ReadCompletion(const Arguments& args)
     memcpy(f4js_cmd.u.rw.dstBuf, buffer_data, f4js_cmd.retval);
   }
   f4js.nodeBuffer.Dispose();
-  sem_post(&f4js.sem);  
+  sem_post(f4js.psem);  
   return scope.Close(Undefined());    
 }
 
@@ -475,7 +498,7 @@ Handle<Value> WriteCompletion(const Arguments& args)
   HandleScope scope;
   ProcessReturnValue(args);
   f4js.nodeBuffer.Dispose();
-  sem_post(&f4js.sem);  
+  sem_post(f4js.psem);  
   return scope.Close(Undefined());    
 }
 
@@ -489,8 +512,8 @@ static void DispatchOp(uv_async_t* handle, int status)
   Local<FunctionTemplate> tpl = FunctionTemplate::New(GenericCompletion); // default
   f4js_cmd.retval = -EPERM;
   int argc = 0;
-  Handle<Value> argv[6];  
-  Local<String> path = String::New(f4js_cmd.in_path);  
+  Handle<Value> argv[6]; 
+  Local<String> path = String::New(f4js_cmd.in_path); 
   argv[argc++] = path;
   node::Buffer* buffer = NULL; // used for read/write operations
   bool passInfo = false;
@@ -566,7 +589,7 @@ static void DispatchOp(uv_async_t* handle, int status)
   }
   Local<Function> handler = Local<Function>::Cast(f4js.handlers->Get(String::NewSymbol(symName.c_str())));
   if (handler->IsUndefined()) {
-    sem_post(&f4js.sem);
+    sem_post(f4js.psem);
     return;
   }
   Local<Function> cb = tpl->GetFunction();
@@ -606,8 +629,13 @@ Handle<Value> Start(const Arguments& args)
   
   f4js.root = root;
   f4js.handlers = Persistent<Object>::New(Local<Object>::Cast(args[1]));
-
-  sem_init(&f4js.sem, 0, 0);
+  f4js.psem = sem_open(f4js_semaphore_name().c_str(), O_CREAT, S_IRUSR | S_IWUSR, 0);
+  if (f4js.psem == SEM_FAILED)
+  {
+     std::cerr << "Error: semaphore creation failed - " << strerror(errno) << "\n";
+     exit(-1);
+  }
+ 
   uv_async_init(uv_default_loop(), &f4js.async, DispatchOp);
 
   pthread_attr_t attr;
