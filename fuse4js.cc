@@ -46,6 +46,7 @@
 #include <semaphore.h>
 #include <string>
 #include <iostream>
+#include <sstream>
 #include <stdlib.h>
 
 using namespace v8;
@@ -130,9 +131,11 @@ static struct {
 
 // ---------------------------------------------------------------------------
 
-std::string f4js_semaphore_path()
+std::string f4js_semaphore_name()
 {
-   return std::string("fuse4js");// + f4js.root; // apperently on linux this can't be path name
+   std::ostringstream o;
+   o << "fuse4js" << getpid();
+   return o.str();
 }
 
 // ---------------------------------------------------------------------------
@@ -447,7 +450,7 @@ Handle<Value> GenericCompletion(const Arguments& args)
     pthread_join(f4js.fuse_thread, NULL);
     uv_unref((uv_handle_t*) &f4js.async);
     sem_close(f4js.psem);
-    sem_unlink(f4js_semaphore_path().c_str());    
+    sem_unlink(f4js_semaphore_name().c_str());    
   }
   return scope.Close(Undefined());    
 }
@@ -624,7 +627,7 @@ Handle<Value> Start(const Arguments& args)
   
   f4js.root = root;
   f4js.handlers = Persistent<Object>::New(Local<Object>::Cast(args[1]));
-  f4js.psem = sem_open(f4js_semaphore_path().c_str(), O_CREAT, S_IRUSR | S_IWUSR, 0);
+  f4js.psem = sem_open(f4js_semaphore_name().c_str(), O_CREAT, S_IRUSR | S_IWUSR, 0);
   if (f4js.psem == SEM_FAILED)
   {
      std::cerr << "Error: semaphore creation failed - " << strerror(errno) << "\n";
