@@ -70,6 +70,7 @@ enum fuseop_t {
   OP_OPEN,
   OP_READ,
   OP_WRITE,
+  OP_TRUNCATE,
   OP_RELEASE,
   OP_CREATE,
   OP_UNLINK,
@@ -87,6 +88,7 @@ const char* fuseop_names[] = {
     "open",
     "read",
     "write",
+    "truncate",
     "release",
     "create",
     "unlink",
@@ -218,6 +220,13 @@ int f4js_write (const char *path,
 
 // ---------------------------------------------------------------------------
 
+int f4js_truncate (const char *path, off_t offset)
+{
+  f4js_cmd.u.rw.offset = offset;
+  return f4js_rpc(OP_TRUNCATE, path);
+}
+// ---------------------------------------------------------------------------
+
 int f4js_release (const char *path, struct fuse_file_info *info)
 {
   f4js_cmd.info = info;
@@ -301,6 +310,7 @@ void *fuse_thread(void *)
   ops.open = f4js_open;
   ops.read = f4js_read;
   ops.write = f4js_write;
+  ops.truncate = f4js_truncate;
   ops.release = f4js_release;
   ops.create = f4js_create;
   ops.utimens = f4js_utimens;
@@ -566,6 +576,10 @@ static void DispatchOp(uv_async_t* handle, int status)
     tpl = FunctionTemplate::New(WriteCompletion);
     buffer = node::Buffer::New((char*)f4js_cmd.u.rw.srcBuf, f4js_cmd.u.rw.len);
     passInfo = true;
+    break;
+
+  case OP_TRUNCATE:
+    argv[argc++] = Number::New((double)f4js_cmd.u.rw.offset);
     break;
 
   case OP_RELEASE:
