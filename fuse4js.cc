@@ -68,6 +68,7 @@ enum fuseop_t {
   OP_READDIR,
   OP_READLINK,
   OP_OPEN,
+  OP_POLL,
   OP_READ,
   OP_WRITE,
   OP_TRUNCATE,
@@ -87,6 +88,7 @@ const char* fuseop_names[] = {
     "readdir",
     "readlink",
     "open",
+    "poll",
     "read",
     "write",
     "truncate",
@@ -106,6 +108,10 @@ static struct {
   const char *in_path;
   struct fuse_file_info *info;
   union {
+    struct {
+      struct fuse_pollhandle *ph;
+      unsigned *reventsp;
+    } poll;
     struct {
       struct stat *stbuf;
     } getattr;
@@ -188,6 +194,17 @@ int f4js_open(const char *path, struct fuse_file_info *info)
 {
   f4js_cmd.info = info;
   return f4js_rpc(OP_OPEN, path);
+}
+
+// ---------------------------------------------------------------------------
+
+int f4js_poll(const char *path, struct fuse_file_info *info,
+              struct fuse_pollhandle *ph, unsigned *reventsp)
+{
+  f4js_cmd.info = info;
+  f4js_cmd.u.poll.ph = ph;
+  f4js_cmd.u.poll.reventsp = reventsp;
+  return f4js_rpc(OP_POLL, path);
 }
 
 // ---------------------------------------------------------------------------
@@ -319,6 +336,7 @@ void *fuse_thread(void *)
   ops.readdir = f4js_readdir;
   ops.readlink = f4js_readlink;
   ops.open = f4js_open;
+  ops.poll = f4js_poll;
   ops.read = f4js_read;
   ops.write = f4js_write;
   ops.truncate = f4js_truncate;
@@ -515,6 +533,19 @@ Handle<Value> ReadCompletion(const Arguments& args)
 
 // ---------------------------------------------------------------------------
 
+Handle<Value> PollCompletion(const Arguments& args)
+{
+  HandleScope scope;
+  ProcessReturnValue(args);
+  if (f4js_cmd.retval == 0)
+    fuse_notify_poll(f4js_cmd.u.poll.ph);
+  fuse_pollhandle_destroy(f4js_cmd.u.poll.ph);
+  sem_post(f4js.psem);
+  return scope.Close(Undefined());
+}
+
+// ---------------------------------------------------------------------------
+
 Handle<Value> WriteCompletion(const Arguments& args)
 {
   HandleScope scope;
@@ -589,6 +620,11 @@ static void DispatchOp(uv_async_t* handle, int status)
     buffer = node::Buffer::New((char*)f4js_cmd.u.rw.srcBuf, f4js_cmd.u.rw.len);
     passInfo = true;
     break;
+
+  case OP_POLL:
+    tpl = FunctionTemplate::New(PollCompletion);
+//     argv[argc++] = Number::New((unsigned*)f4js_cmd.u.poll.reventsp);
+    passInfo = true;
 
   case OP_TRUNCATE:
     argv[argc++] = Number::New((double)f4js_cmd.u.rw.offset);
