@@ -279,7 +279,8 @@ int f4js_rmdir (const char *path)
 void* f4js_init(struct fuse_conn_info *conn)
 {
   // We currently always return NULL
-  return (void*)f4js_rpc(OP_INIT, "");
+  f4js_rpc(OP_INIT, "");
+  return NULL;
 }
 
 // ---------------------------------------------------------------------------

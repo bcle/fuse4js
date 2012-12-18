@@ -28,7 +28,7 @@ This tutorial explains how to install and use fuse4js.
 * cd to the directory you created.
 * Create a mnt/ subdirectory. It will be used as the mount point for testing FUSE file systems.
 * Download the fuse4js/ source directory:
-`git clone git://github.com/bcle/fuse4js.git`
+`git clone git://github.com/vmware/fuse4js.git`
 * Compile the source code to create the fuse4js add-on in a local node_modules/ subdirectory:  
 `npm install fuse4js`
 * Run the sample jsonFS file system:  
