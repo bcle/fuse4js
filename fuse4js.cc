@@ -517,7 +517,7 @@ static void DispatchOp(uv_async_t* handle, int status)
   Local<String> path = String::New(f4js_cmd.in_path); 
   argv[argc++] = path;
   node::Buffer* buffer = NULL; // used for read/write operations
-  bool passInfo = false;
+  bool passHandle = false;
   
   switch (f4js_cmd.op) {
   
@@ -560,17 +560,17 @@ static void DispatchOp(uv_async_t* handle, int status)
   case OP_READ:
     tpl = FunctionTemplate::New(ReadCompletion);
     buffer = node::Buffer::New(f4js_cmd.u.rw.len);
-    passInfo = true;
+    passHandle = true;
     break;
     
   case OP_WRITE:
     tpl = FunctionTemplate::New(WriteCompletion);   
     buffer = node::Buffer::New((char*)f4js_cmd.u.rw.srcBuf, f4js_cmd.u.rw.len);
-    passInfo = true;
+    passHandle = true;
     break;
     
   case OP_RELEASE:
-    passInfo = true;
+    passHandle = true;
     break;
     
   default:
@@ -585,7 +585,7 @@ static void DispatchOp(uv_async_t* handle, int status)
     f4js.nodeBuffer = Persistent<Object>::New(buffer->handle_);   
     argv[argc++] = f4js.nodeBuffer;
   }
-  if (passInfo) {
+  if (passHandle) {
     argv[argc++] = Number::New((double)f4js_cmd.info->fh); // optional file handle returned by open()
   }
   Local<Function> handler = Local<Function>::Cast(f4js.handlers->Get(String::NewSymbol(symName.c_str())));
