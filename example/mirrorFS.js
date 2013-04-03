@@ -46,7 +46,7 @@ var errnoMap = {
 };
 
 function excToErrno(exc) {
-  errno = errnoMap[exc.code];
+  var errno = errnoMap[exc.code];
   if (!errno)
     errno = errnoMap.EPERM; // default to EPERM
   return errno;
