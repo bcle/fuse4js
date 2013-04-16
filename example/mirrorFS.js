@@ -103,6 +103,22 @@ function readlink(path, cb) {
   });
 }
 
+//---------------------------------------------------------------------------
+
+/*
+ * Handler for the chmod() system call.
+ * path: the path to the file
+ * mode: the desired permissions
+ * cb: a callback of the form cb(err), where err is the Posix return code.
+ */
+function chmod(path, mode, cb) {
+  var path = pth.join(srcRoot, path);
+  return fs.chmod(path, mode, function chmodCb(err) {
+    if (err)
+      return cb(-excToErrno(err));
+    return cb(0);
+  });
+}
 
 //---------------------------------------------------------------------------
 
@@ -319,6 +335,7 @@ var handlers = {
   getattr: getattr,
   readdir: readdir,
   readlink: readlink,
+  chmod: chmod,
   open: open,
   read: read,
   write: write,
