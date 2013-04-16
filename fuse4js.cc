@@ -67,6 +67,7 @@ enum fuseop_t {
   OP_GETATTR = 0,
   OP_READDIR,
   OP_READLINK,
+  OP_CHMOD,
   OP_OPEN,
   OP_READ,
   OP_WRITE,
@@ -84,6 +85,7 @@ const char* fuseop_names[] = {
     "getattr",
     "readdir",
     "readlink",
+    "chmod",
     "open",
     "read",
     "write",
@@ -113,6 +115,9 @@ static struct {
       char *dstBuf;
       size_t len;
     } readlink;
+    struct {
+      mode_t mode;
+    } chmod;
    struct {
       off_t offset;
       size_t len;
@@ -177,6 +182,13 @@ static int f4js_readlink(const char *path, char *buf, size_t len)
   return f4js_rpc(OP_READLINK, path);
 }
 
+// ---------------------------------------------------------------------------
+
+static int f4js_chmod(const char *path, mode_t mode)
+{
+  f4js_cmd.u.chmod.mode = mode;
+  return f4js_rpc(OP_CHMOD, path);
+}
 
 // ---------------------------------------------------------------------------
 
@@ -299,6 +311,7 @@ void *fuse_thread(void *)
   ops.getattr = f4js_getattr;
   ops.readdir = f4js_readdir;
   ops.readlink = f4js_readlink;
+  ops.chmod = f4js_chmod;
   ops.open = f4js_open;
   ops.read = f4js_read;
   ops.write = f4js_write;
@@ -537,6 +550,10 @@ static void DispatchOp(uv_async_t* handle, int status)
   
   case OP_READLINK:
     tpl = FunctionTemplate::New(ReadLinkCompletion);
+    break;
+
+  case OP_CHMOD:
+    argv[argc++] = Number::New((double)f4js_cmd.u.chmod.mode);
     break;
   
   case OP_RENAME:
