@@ -624,7 +624,9 @@ static void DispatchOp(uv_async_t* handle, int status)
     argv[argc++] = String::New(f4js_cmd.u.setxattr.value);
     argv[argc++] = Number::New((double)f4js_cmd.u.setxattr.size);
     argv[argc++] = Number::New((double)f4js_cmd.u.setxattr.position);
+#ifdef __APPLE__
     argv[argc++] = Number::New((double)f4js_cmd.u.setxattr.options);
+#endif
     break;
   
   case OP_RENAME:
