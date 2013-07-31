@@ -68,6 +68,7 @@ enum fuseop_t {
   OP_READDIR,
   OP_READLINK,
   OP_CHMOD,
+  OP_SETXATTR,
   OP_OPEN,
   OP_READ,
   OP_WRITE,
@@ -86,6 +87,7 @@ const char* fuseop_names[] = {
     "readdir",
     "readlink",
     "chmod",
+    "setxattr",
     "open",
     "read",
     "write",
@@ -118,6 +120,22 @@ static struct {
     struct {
       mode_t mode;
     } chmod;
+#ifdef __APPLE__
+    struct {
+      const char *name;
+      const char *value;
+      size_t size;
+      int position;
+      uint32_t options;
+    } setxattr;
+#else
+    struct {
+      const char *name;
+      const char *value;
+      size_t size;
+      int flags;
+    } setxattr;
+#endif
    struct {
       off_t offset;
       size_t len;
@@ -188,6 +206,49 @@ static int f4js_chmod(const char *path, mode_t mode)
 {
   f4js_cmd.u.chmod.mode = mode;
   return f4js_rpc(OP_CHMOD, path);
+}
+
+// ---------------------------------------------------------------------------
+
+
+#ifdef __APPLE__
+static int f4js_setxattr(const char *path, const char* name, const char* value, size_t size, int position, uint32_t options)
+{
+  f4js_cmd.u.setxattr.name = name;
+  f4js_cmd.u.setxattr.value = value;
+  f4js_cmd.u.setxattr.size = size;
+  f4js_cmd.u.setxattr.position = position;
+  f4js_cmd.u.setxattr.options = options;
+  return f4js_rpc(OP_SETXATTR, path);
+}
+#else
+static int f4js_setxattr(const char *path, const char* name, const char* value, size_t size, int flags)
+{
+  f4js_cmd.u.setxattr.name = name;
+  f4js_cmd.u.setxattr.value = value;
+  f4js_cmd.u.setxattr.size = size;
+  f4js_cmd.u.setxattr.flags = flags;
+  return f4js_rpc(OP_SETXATTR, path);
+}
+#endif
+
+
+// ---------------------------------------------------------------------------
+
+static int f4js_statfs(const char *path, struct statvfs *buf)
+{
+  buf->f_bsize = 10000000;
+  buf->f_frsize = 10000000;
+  buf->f_blocks = 10000000;
+  buf->f_bfree = 10000000;
+  buf->f_bavail = 10000000;
+  buf->f_files = 10000000;
+  buf->f_ffree = 10000000;
+  buf->f_favail = 10000000;
+  buf->f_fsid = 10000000;
+  buf->f_flag = 10000000;
+  buf->f_namemax = 10000000;
+  return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -312,6 +373,8 @@ void *fuse_thread(void *)
   ops.readdir = f4js_readdir;
   ops.readlink = f4js_readlink;
   ops.chmod = f4js_chmod;
+  ops.setxattr = f4js_setxattr;
+  ops.statfs = f4js_statfs;
   ops.open = f4js_open;
   ops.read = f4js_read;
   ops.write = f4js_write;
@@ -554,6 +617,14 @@ static void DispatchOp(uv_async_t* handle, int status)
 
   case OP_CHMOD:
     argv[argc++] = Number::New((double)f4js_cmd.u.chmod.mode);
+    break;
+
+  case OP_SETXATTR:
+    argv[argc++] = String::New(f4js_cmd.u.setxattr.name);
+    argv[argc++] = String::New(f4js_cmd.u.setxattr.value);
+    argv[argc++] = Number::New((double)f4js_cmd.u.setxattr.size);
+    argv[argc++] = Number::New((double)f4js_cmd.u.setxattr.position);
+    argv[argc++] = Number::New((double)f4js_cmd.u.setxattr.options);
     break;
   
   case OP_RENAME:
