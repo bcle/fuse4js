@@ -487,7 +487,7 @@ Handle<Value> ReadDirCompletion(const Arguments& args)
       Local<Value> el = ar->Get(i);
       if (!el->IsUndefined() && el->IsString()) {
         Local<String> name = Local<String>::Cast(el);
-        String::AsciiValue av(name);  
+        String::Utf8Value av(name);  
         struct stat st;
         memset(&st, 0, sizeof(st)); // structure not used. Zero everything.
         if (f4js_cmd.u.readdir.filler(f4js_cmd.u.readdir.buf, *av, &st, 0))
@@ -506,7 +506,7 @@ Handle<Value> ReadLinkCompletion(const Arguments& args)
   HandleScope scope;
   ProcessReturnValue(args);
   if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsString()) {
-    String::AsciiValue av(args[1]);
+    String::Utf8Value av(args[1]);
     size_t len = std::min((size_t)av.length() + 1, f4js_cmd.u.readlink.len);
     strncpy(f4js_cmd.u.readlink.dstBuf, *av, len);
     // terminate string even when it is truncated
@@ -707,7 +707,7 @@ Handle<Value> Start(const Arguments& args)
     return scope.Close(Undefined());
   }
 
-  String::AsciiValue av(args[0]);
+  String::Utf8Value av(args[0]);
   char *root = *av;
   if (root == NULL) {
     ThrowException(Exception::TypeError(String::New("Path is incorrect")));
