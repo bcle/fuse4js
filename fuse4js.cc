@@ -69,6 +69,7 @@ enum fuseop_t {
   OP_READLINK,
   OP_CHMOD,
   OP_SETXATTR,
+  OP_STATFS,
   OP_OPEN,
   OP_READ,
   OP_WRITE,
@@ -88,6 +89,7 @@ const char* fuseop_names[] = {
     "readlink",
     "chmod",
     "setxattr",
+    "statfs",
     "open",
     "read",
     "write",
@@ -113,6 +115,9 @@ static struct {
       void *buf;
       fuse_fill_dir_t filler;
     } readdir;
+    struct {
+      struct statvfs *buf;
+    } statfs;
     struct {
       char *dstBuf;
       size_t len;
@@ -237,18 +242,8 @@ static int f4js_setxattr(const char *path, const char* name, const char* value, 
 
 static int f4js_statfs(const char *path, struct statvfs *buf)
 {
-  buf->f_bsize = 10000000;
-  buf->f_frsize = 10000000;
-  buf->f_blocks = 10000000;
-  buf->f_bfree = 10000000;
-  buf->f_bavail = 10000000;
-  buf->f_files = 10000000;
-  buf->f_ffree = 10000000;
-  buf->f_favail = 10000000;
-  buf->f_fsid = 10000000;
-  buf->f_flag = 10000000;
-  buf->f_namemax = 10000000;
-  return 0;
+  f4js_cmd.u.statfs.buf = buf;
+  return f4js_rpc(OP_STATFS, path);
 }
 
 // ---------------------------------------------------------------------------
@@ -501,6 +496,86 @@ Handle<Value> ReadDirCompletion(const Arguments& args)
 
 // ---------------------------------------------------------------------------
 
+Handle<Value> StatfsCompletion(const Arguments& args)
+{
+  HandleScope scope;
+  ProcessReturnValue(args);
+  if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsObject()) {
+    memset(f4js_cmd.u.statfs.buf, 0, sizeof(*f4js_cmd.u.statfs.buf));
+    Handle<Object> stat = Handle<Object>::Cast(args[1]);
+
+    Local<Value> prop = stat->Get(String::NewSymbol("bsize"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.statfs.buf->f_bsize = (off_t)num->Value();
+    }
+
+    prop = stat->Get(String::NewSymbol("frsize"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.statfs.buf->f_frsize = (off_t)num->Value();
+    }
+
+    prop = stat->Get(String::NewSymbol("blocks"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.statfs.buf->f_blocks = (off_t)num->Value();
+    }
+
+    prop = stat->Get(String::NewSymbol("bfree"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.statfs.buf->f_bfree = (off_t)num->Value();
+    }
+
+    prop = stat->Get(String::NewSymbol("bavail"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.statfs.buf->f_bavail = (off_t)num->Value();
+    }
+
+    prop = stat->Get(String::NewSymbol("files"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.statfs.buf->f_files = (off_t)num->Value();
+    }
+
+    prop = stat->Get(String::NewSymbol("ffree"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.statfs.buf->f_ffree = (off_t)num->Value();
+    }
+
+    prop = stat->Get(String::NewSymbol("favail"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.statfs.buf->f_favail = (off_t)num->Value();
+    }
+
+    prop = stat->Get(String::NewSymbol("fsid"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.statfs.buf->f_fsid = (off_t)num->Value();
+    }
+
+    prop = stat->Get(String::NewSymbol("flag"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.statfs.buf->f_flag = (off_t)num->Value();
+    }
+
+    prop = stat->Get(String::NewSymbol("namemax"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.statfs.buf->f_namemax = (off_t)num->Value();
+    }
+  }
+  sem_post(f4js.psem);  
+  return scope.Close(Undefined()); 
+}
+
+// ---------------------------------------------------------------------------
+
 Handle<Value> ReadLinkCompletion(const Arguments& args)
 {
   HandleScope scope;
@@ -629,6 +704,11 @@ static void DispatchOp(uv_async_t* handle, int status)
 #else
     argv[argc++] = Number::New((double)f4js_cmd.u.setxattr.flags);
 #endif
+    break;
+
+  case OP_STATFS:
+    --argc; // Ugly. Remove the first argument (path) because not needed.
+    tpl = FunctionTemplate::New(StatfsCompletion);
     break;
   
   case OP_RENAME:
