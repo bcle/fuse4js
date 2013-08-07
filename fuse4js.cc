@@ -55,6 +55,8 @@ using namespace v8;
 
 static struct {
   bool enableFuseDebug;
+  char **extraArgv;
+  size_t extraArgc;
   uv_async_t async;
   sem_t *psem;
   pthread_t fuse_thread;
@@ -384,7 +386,12 @@ void *fuse_thread(void *)
   ops.destroy = f4js_destroy;
   const char* debugOption = f4js.enableFuseDebug? "-d":"-f";
   char *argv[] = { (char*)"dummy", (char*)"-s", (char*)debugOption, (char*)f4js.root.c_str() };
-  if (fuse_main(4, argv, &ops, NULL)) {
+
+  char **argvIncludingExtraArgs = (char**)malloc(sizeof(argv)+sizeof(char*)*f4js.extraArgc);
+  memcpy(argvIncludingExtraArgs, argv, sizeof(argv));
+  memcpy(argvIncludingExtraArgs+sizeof(argv)/sizeof(char*), f4js.extraArgv, sizeof(char*)*f4js.extraArgc);
+
+  if (fuse_main((sizeof(argv)/sizeof(char*) + f4js.extraArgc), argvIncludingExtraArgs, &ops, NULL)) {
     // Error occured
     f4js_destroy(NULL);
   }
@@ -440,6 +447,12 @@ Handle<Value> GetAttrCompletion(const Arguments& args)
     if (!prop->IsUndefined() && prop->IsNumber()) {
       Local<Number> num = Local<Number>::Cast(prop);
       f4js_cmd.u.getattr.stbuf->st_mode = (mode_t)num->Value();
+    }
+
+    prop = stat->Get(String::NewSymbol("nlink"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.getattr.stbuf->st_nlink = (mode_t)num->Value();
     }
     
     prop = stat->Get(String::NewSymbol("uid"));
@@ -798,6 +811,29 @@ Handle<Value> Start(const Arguments& args)
   if (args.Length() >= 3) {
     Local <Boolean> debug = args[2]->ToBoolean();
     f4js.enableFuseDebug = debug->BooleanValue();
+  }
+
+  if (args.Length() >= 4) {
+    if (!args[3]->IsArray()) {
+        ThrowException(Exception::TypeError(String::New("Wrong argument types")));
+        return scope.Close(Undefined());
+    }
+
+    Handle<Array> mountArgs = Handle<Array>::Cast(args[3]);
+    f4js.extraArgv = (char**)malloc(mountArgs->Length() * sizeof(char*));
+    f4js.extraArgc = 0;
+
+    for (uint32_t i = 0; i < mountArgs->Length(); i++) {
+      Local<Value> arg = mountArgs->Get(i);
+
+      if (!arg->IsUndefined() && arg->IsString()) {
+        Local<String> stringArg = Local<String>::Cast(arg);
+        String::AsciiValue av(stringArg);  
+        f4js.extraArgv[f4js.extraArgc] = (char*)malloc(sizeof(av));
+        memcpy(f4js.extraArgv[f4js.extraArgc], *av, sizeof(av));
+        f4js.extraArgc++;
+      }
+    }
   }
   
   f4js.root = root;

@@ -540,7 +540,7 @@ function parseArgs() {
     content = fs.readFileSync(options.inJson, 'utf8');
     obj = JSON.parse(content);
     try {
-      f4js.start(options.mountPoint, handlers, options.debugFuse);
+      f4js.start(options.mountPoint, handlers, options.debugFuse, ['-o', 'allow_other']);
     } catch (e) {
       console.log("Exception when starting file system: " + e);
     }
