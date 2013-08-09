@@ -390,6 +390,48 @@ function init(cb) {
 //---------------------------------------------------------------------------
 
 /*
+ * Handler for the setxattr() FUSE hook. 
+ * The arguments differ between different operating systems.
+ * Darwin(Mac OSX):
+ *  * a = position
+ *  * b = options
+ *  * c = cmd
+ * Other:
+ *  * a = flags
+ *  * b = cmd
+ *  * c = undefined
+ */
+function setxattr(path, name, value, size, a, b, c) {
+  console.log("Setxattr called:", path, name, value, size, a, b, c)
+  cb(0);
+}
+
+//---------------------------------------------------------------------------
+
+/*
+ * Handler for the statfs() FUSE hook. 
+ * cb: a callback of the form cb(err, stat), where err is the Posix return code
+ *     and stat is the result in the form of a statvfs structure (when err === 0)
+ */
+function statfs(cb) {
+  cb(0, {
+      bsize: 1000000,
+      frsize: 1000000,
+      blocks: 1000000,
+      bfree: 1000000,
+      bavail: 1000000,
+      files: 1000000,
+      ffree: 1000000,
+      favail: 1000000,
+      fsid: 1000000,
+      flag: 1000000,
+      namemax: 1000000
+  });
+}
+
+//---------------------------------------------------------------------------
+
+/*
  * Handler for the destroy() FUSE hook. You can perform clean up tasks here.
  * cb: a callback to call when you're done. It takes no arguments.
  */
@@ -420,7 +462,9 @@ var handlers = {
   mkdir: mkdir,
   rmdir: rmdir,
   init: init,
-  destroy: destroy
+  destroy: destroy,
+  setxattr: setxattr,
+  statfs: statfs
 };
 
 //---------------------------------------------------------------------------
@@ -478,7 +522,7 @@ function parseArgs() {
     content = fs.readFileSync(options.inJson, 'utf8');
     obj = JSON.parse(content);
     try {
-      f4js.start(options.mountPoint, handlers, options.debugFuse);
+      f4js.start(options.mountPoint, handlers, options.debugFuse, ['-o', 'allow_other']);
     } catch (e) {
       console.log("Exception when starting file system: " + e);
     }

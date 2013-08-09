@@ -55,6 +55,8 @@ using namespace v8;
 
 static struct {
   bool enableFuseDebug;
+  char **extraArgv;
+  size_t extraArgc;
   uv_async_t async;
   sem_t *psem;
   pthread_t fuse_thread;
@@ -68,6 +70,8 @@ enum fuseop_t {
   OP_READDIR,
   OP_READLINK,
   OP_CHMOD,
+  OP_SETXATTR,
+  OP_STATFS,
   OP_OPEN,
   OP_READ,
   OP_WRITE,
@@ -86,6 +90,8 @@ const char* fuseop_names[] = {
     "readdir",
     "readlink",
     "chmod",
+    "setxattr",
+    "statfs",
     "open",
     "read",
     "write",
@@ -112,12 +118,31 @@ static struct {
       fuse_fill_dir_t filler;
     } readdir;
     struct {
+      struct statvfs *buf;
+    } statfs;
+    struct {
       char *dstBuf;
       size_t len;
     } readlink;
     struct {
       mode_t mode;
     } chmod;
+#ifdef __APPLE__
+    struct {
+      const char *name;
+      const char *value;
+      size_t size;
+      int position;
+      uint32_t options;
+    } setxattr;
+#else
+    struct {
+      const char *name;
+      const char *value;
+      size_t size;
+      int flags;
+    } setxattr;
+#endif
    struct {
       off_t offset;
       size_t len;
@@ -188,6 +213,39 @@ static int f4js_chmod(const char *path, mode_t mode)
 {
   f4js_cmd.u.chmod.mode = mode;
   return f4js_rpc(OP_CHMOD, path);
+}
+
+// ---------------------------------------------------------------------------
+
+
+#ifdef __APPLE__
+static int f4js_setxattr(const char *path, const char* name, const char* value, size_t size, int position, uint32_t options)
+{
+  f4js_cmd.u.setxattr.name = name;
+  f4js_cmd.u.setxattr.value = value;
+  f4js_cmd.u.setxattr.size = size;
+  f4js_cmd.u.setxattr.position = position;
+  f4js_cmd.u.setxattr.options = options;
+  return f4js_rpc(OP_SETXATTR, path);
+}
+#else
+static int f4js_setxattr(const char *path, const char* name, const char* value, size_t size, int flags)
+{
+  f4js_cmd.u.setxattr.name = name;
+  f4js_cmd.u.setxattr.value = value;
+  f4js_cmd.u.setxattr.size = size;
+  f4js_cmd.u.setxattr.flags = flags;
+  return f4js_rpc(OP_SETXATTR, path);
+}
+#endif
+
+
+// ---------------------------------------------------------------------------
+
+static int f4js_statfs(const char *path, struct statvfs *buf)
+{
+  f4js_cmd.u.statfs.buf = buf;
+  return f4js_rpc(OP_STATFS, path);
 }
 
 // ---------------------------------------------------------------------------
@@ -312,6 +370,8 @@ void *fuse_thread(void *)
   ops.readdir = f4js_readdir;
   ops.readlink = f4js_readlink;
   ops.chmod = f4js_chmod;
+  ops.setxattr = f4js_setxattr;
+  ops.statfs = f4js_statfs;
   ops.open = f4js_open;
   ops.read = f4js_read;
   ops.write = f4js_write;
@@ -326,7 +386,13 @@ void *fuse_thread(void *)
   ops.destroy = f4js_destroy;
   const char* debugOption = f4js.enableFuseDebug? "-d":"-f";
   char *argv[] = { (char*)"dummy", (char*)"-s", (char*)debugOption, (char*)f4js.root.c_str() };
-  if (fuse_main(4, argv, &ops, NULL)) {
+
+  int initialArgc = sizeof(argv) / sizeof(char*);
+  char **argvIncludingExtraArgs = (char**)malloc(sizeof(char*) * (initialArgc + f4js.extraArgc));
+  memcpy(argvIncludingExtraArgs, argv, sizeof(argv));
+  memcpy(argvIncludingExtraArgs + initialArgc, f4js.extraArgv, sizeof(char*) * f4js.extraArgc);
+
+  if (fuse_main((initialArgc + f4js.extraArgc), argvIncludingExtraArgs, &ops, NULL)) {
     // Error occured
     f4js_destroy(NULL);
   }
@@ -383,6 +449,12 @@ Handle<Value> GetAttrCompletion(const Arguments& args)
       Local<Number> num = Local<Number>::Cast(prop);
       f4js_cmd.u.getattr.stbuf->st_mode = (mode_t)num->Value();
     }
+
+    prop = stat->Get(String::NewSymbol("nlink"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.getattr.stbuf->st_nlink = (mode_t)num->Value();
+    }
     
     prop = stat->Get(String::NewSymbol("uid"));
     if (!prop->IsUndefined() && prop->IsNumber()) {
@@ -424,7 +496,7 @@ Handle<Value> ReadDirCompletion(const Arguments& args)
       Local<Value> el = ar->Get(i);
       if (!el->IsUndefined() && el->IsString()) {
         Local<String> name = Local<String>::Cast(el);
-        String::AsciiValue av(name);  
+        String::Utf8Value av(name);  
         struct stat st;
         memset(&st, 0, sizeof(st)); // structure not used. Zero everything.
         if (f4js_cmd.u.readdir.filler(f4js_cmd.u.readdir.buf, *av, &st, 0))
@@ -438,12 +510,92 @@ Handle<Value> ReadDirCompletion(const Arguments& args)
 
 // ---------------------------------------------------------------------------
 
+Handle<Value> StatfsCompletion(const Arguments& args)
+{
+  HandleScope scope;
+  ProcessReturnValue(args);
+  if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsObject()) {
+    memset(f4js_cmd.u.statfs.buf, 0, sizeof(*f4js_cmd.u.statfs.buf));
+    Handle<Object> stat = Handle<Object>::Cast(args[1]);
+
+    Local<Value> prop = stat->Get(String::NewSymbol("bsize"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.statfs.buf->f_bsize = (off_t)num->Value();
+    }
+
+    prop = stat->Get(String::NewSymbol("frsize"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.statfs.buf->f_frsize = (off_t)num->Value();
+    }
+
+    prop = stat->Get(String::NewSymbol("blocks"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.statfs.buf->f_blocks = (off_t)num->Value();
+    }
+
+    prop = stat->Get(String::NewSymbol("bfree"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.statfs.buf->f_bfree = (off_t)num->Value();
+    }
+
+    prop = stat->Get(String::NewSymbol("bavail"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.statfs.buf->f_bavail = (off_t)num->Value();
+    }
+
+    prop = stat->Get(String::NewSymbol("files"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.statfs.buf->f_files = (off_t)num->Value();
+    }
+
+    prop = stat->Get(String::NewSymbol("ffree"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.statfs.buf->f_ffree = (off_t)num->Value();
+    }
+
+    prop = stat->Get(String::NewSymbol("favail"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.statfs.buf->f_favail = (off_t)num->Value();
+    }
+
+    prop = stat->Get(String::NewSymbol("fsid"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.statfs.buf->f_fsid = (off_t)num->Value();
+    }
+
+    prop = stat->Get(String::NewSymbol("flag"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.statfs.buf->f_flag = (off_t)num->Value();
+    }
+
+    prop = stat->Get(String::NewSymbol("namemax"));
+    if (!prop->IsUndefined() && prop->IsNumber()) {
+      Local<Number> num = Local<Number>::Cast(prop);
+      f4js_cmd.u.statfs.buf->f_namemax = (off_t)num->Value();
+    }
+  }
+  sem_post(f4js.psem);  
+  return scope.Close(Undefined()); 
+}
+
+// ---------------------------------------------------------------------------
+
 Handle<Value> ReadLinkCompletion(const Arguments& args)
 {
   HandleScope scope;
   ProcessReturnValue(args);
   if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsString()) {
-    String::AsciiValue av(args[1]);
+    String::Utf8Value av(args[1]);
     size_t len = std::min((size_t)av.length() + 1, f4js_cmd.u.readlink.len);
     strncpy(f4js_cmd.u.readlink.dstBuf, *av, len);
     // terminate string even when it is truncated
@@ -555,6 +707,23 @@ static void DispatchOp(uv_async_t* handle, int status)
   case OP_CHMOD:
     argv[argc++] = Number::New((double)f4js_cmd.u.chmod.mode);
     break;
+
+  case OP_SETXATTR:
+    argv[argc++] = String::New(f4js_cmd.u.setxattr.name);
+    argv[argc++] = String::New(f4js_cmd.u.setxattr.value);
+    argv[argc++] = Number::New((double)f4js_cmd.u.setxattr.size);
+#ifdef __APPLE__
+    argv[argc++] = Number::New((double)f4js_cmd.u.setxattr.position);
+    argv[argc++] = Number::New((double)f4js_cmd.u.setxattr.options);
+#else
+    argv[argc++] = Number::New((double)f4js_cmd.u.setxattr.flags);
+#endif
+    break;
+
+  case OP_STATFS:
+    --argc; // Ugly. Remove the first argument (path) because not needed.
+    tpl = FunctionTemplate::New(StatfsCompletion);
+    break;
   
   case OP_RENAME:
     argv[argc++] = String::New(f4js_cmd.u.rename.dst);
@@ -632,7 +801,7 @@ Handle<Value> Start(const Arguments& args)
     return scope.Close(Undefined());
   }
 
-  String::AsciiValue av(args[0]);
+  String::Utf8Value av(args[0]);
   char *root = *av;
   if (root == NULL) {
     ThrowException(Exception::TypeError(String::New("Path is incorrect")));
@@ -643,6 +812,29 @@ Handle<Value> Start(const Arguments& args)
   if (args.Length() >= 3) {
     Local <Boolean> debug = args[2]->ToBoolean();
     f4js.enableFuseDebug = debug->BooleanValue();
+  }
+
+  f4js.extraArgc = 0;
+  if (args.Length() >= 4) {
+    if (!args[3]->IsArray()) {
+        ThrowException(Exception::TypeError(String::New("Wrong argument types")));
+        return scope.Close(Undefined());
+    }
+
+    Handle<Array> mountArgs = Handle<Array>::Cast(args[3]);
+    f4js.extraArgv = (char**)malloc(mountArgs->Length() * sizeof(char*));
+
+    for (uint32_t i = 0; i < mountArgs->Length(); i++) {
+      Local<Value> arg = mountArgs->Get(i);
+
+      if (!arg->IsUndefined() && arg->IsString()) {
+        Local<String> stringArg = Local<String>::Cast(arg);
+        String::AsciiValue av(stringArg);  
+        f4js.extraArgv[f4js.extraArgc] = (char*)malloc(sizeof(av));
+        memcpy(f4js.extraArgv[f4js.extraArgc], *av, sizeof(av));
+        f4js.extraArgc++;
+      }
+    }
   }
   
   f4js.root = root;
