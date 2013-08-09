@@ -387,11 +387,12 @@ void *fuse_thread(void *)
   const char* debugOption = f4js.enableFuseDebug? "-d":"-f";
   char *argv[] = { (char*)"dummy", (char*)"-s", (char*)debugOption, (char*)f4js.root.c_str() };
 
-  char **argvIncludingExtraArgs = (char**)malloc(sizeof(argv)+sizeof(char*)*f4js.extraArgc);
+  int initialArgc = sizeof(argv) / sizeof(char*);
+  char **argvIncludingExtraArgs = (char**)malloc(sizeof(char*) * (initialArgc + f4js.extraArgc));
   memcpy(argvIncludingExtraArgs, argv, sizeof(argv));
-  memcpy(argvIncludingExtraArgs+sizeof(argv)/sizeof(char*), f4js.extraArgv, sizeof(char*)*f4js.extraArgc);
+  memcpy(argvIncludingExtraArgs + initialArgc, f4js.extraArgv, sizeof(char*) * f4js.extraArgc);
 
-  if (fuse_main((sizeof(argv)/sizeof(char*) + f4js.extraArgc), argvIncludingExtraArgs, &ops, NULL)) {
+  if (fuse_main((initialArgc + f4js.extraArgc), argvIncludingExtraArgs, &ops, NULL)) {
     // Error occured
     f4js_destroy(NULL);
   }
@@ -813,6 +814,7 @@ Handle<Value> Start(const Arguments& args)
     f4js.enableFuseDebug = debug->BooleanValue();
   }
 
+  f4js.extraArgc = 0;
   if (args.Length() >= 4) {
     if (!args[3]->IsArray()) {
         ThrowException(Exception::TypeError(String::New("Wrong argument types")));
@@ -821,7 +823,6 @@ Handle<Value> Start(const Arguments& args)
 
     Handle<Array> mountArgs = Handle<Array>::Cast(args[3]);
     f4js.extraArgv = (char**)malloc(mountArgs->Length() * sizeof(char*));
-    f4js.extraArgc = 0;
 
     for (uint32_t i = 0; i < mountArgs->Length(); i++) {
       Local<Value> arg = mountArgs->Get(i);

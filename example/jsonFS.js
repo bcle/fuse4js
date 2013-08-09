@@ -390,24 +390,6 @@ function init(cb) {
 //---------------------------------------------------------------------------
 
 /*
- * Handler for the destroy() FUSE hook. You can perform clean up tasks here.
- * cb: a callback to call when you're done. It takes no arguments.
- */
-function destroy(cb) {
-  if (options.outJson) {
-    try {
-      fs.writeFileSync(options.outJson, JSON.stringify(obj, null, '  '), 'utf8');
-    } catch (e) {
-      console.log("Exception when writing file: " + e);
-    }
-  }
-  console.log("File system stopped");      
-  cb();
-}
-
-//---------------------------------------------------------------------------
-
-/*
  * Handler for the setxattr() FUSE hook. 
  * The arguments differ between different operating systems.
  * Darwin(Mac OSX):
