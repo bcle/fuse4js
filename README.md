@@ -37,6 +37,7 @@ This mounts the JSON file as a file system. In a another shell, you can browse a
 * To dismount, make sure no processes remain under the file system path, and then type:
 `fusermount -u /tmp/tutorial/mnt`
 * Changes to the file system are discarded. If you want to save the modified data to a new JSON file, add the `-o outputJsonFilePath` option when starting the program.
+* If you have trouble with the jsonFS example, consider setting "user_allow_other" in /etc/fuse.conf, as some linux distributions need this as a requirement for the option "allow_others" as set in the jsonFS example.
 
 Once you are comfortable with the sample program, you can move on to the second example, *mirrorFS.js*. It is equivalent to the fusexmp.c sample program that ships with the FUSE source code. As its name indicates, it maps an existing file system subtree to a mount point of your choice. It demonstrates more advanced features such as file handles. The syntax is:
 `node fuse4js/example/mirrorFS.js <file_system_directory> <new_mount_point>`
