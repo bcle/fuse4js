@@ -476,6 +476,7 @@ function usage() {
   console.log("Options:");
   console.log("-o outputJsonFile  : save modified data to new JSON file. Input file is never modified.");
   console.log("-d                 : make FUSE print debug statements.");
+  console.log("-a                 : add allow_other option to mount (might need user_allow_other in system fuse config file).");
   console.log();
   console.log("Example:");
   console.log("node example/jsonFS.fs -d -o /tmp/output.json example/sample.json /tmp/mnt");
@@ -504,6 +505,9 @@ function parseArgs() {
         i += 2;
         --remaining;
       } else return false;
+    } else if (args[i] === '-a') {
+      options.allowOthers = true;
+      ++i;
     } else return false;
   }
   return true;
@@ -522,7 +526,12 @@ function parseArgs() {
     content = fs.readFileSync(options.inJson, 'utf8');
     obj = JSON.parse(content);
     try {
-      f4js.start(options.mountPoint, handlers, options.debugFuse, ['-o', 'allow_other']);
+      var opts = [];
+      if (options.allowOthers) {
+        opts.push('-o');
+        opts.push('allow_other');
+      }
+      f4js.start(options.mountPoint, handlers, options.debugFuse, opts);
     } catch (e) {
       console.log("Exception when starting file system: " + e);
     }
