@@ -62,7 +62,15 @@ static struct {
   pthread_t fuse_thread;
   std::string root;
   Persistent<Object> handlers;
-  Persistent<Object> nodeBuffer;  
+  Persistent<Object> nodeBuffer;
+  Persistent<Function> GetAttrFunc;
+  Persistent<Function> ReadDirFunc;
+  Persistent<Function> ReadLinkFunc;
+  Persistent<Function> StatfsFunc;
+  Persistent<Function> OpenCreateFunc;
+  Persistent<Function> ReadFunc;
+  Persistent<Function> WriteFunc;
+  Persistent<Function> GenericFunc;
 } f4js;
 
 enum fuseop_t {  
@@ -675,7 +683,7 @@ static void DispatchOp(uv_async_t* handle, int status)
 {
   HandleScope scope;
   std::string symName(fuseop_names[f4js_cmd.op]);
-  Local<FunctionTemplate> tpl = FunctionTemplate::New(GenericCompletion); // default
+  Persistent<Function> tpl = f4js.GenericFunc; // default
   f4js_cmd.retval = -EPERM;
   int argc = 0;
   Handle<Value> argv[6]; 
@@ -693,15 +701,15 @@ static void DispatchOp(uv_async_t* handle, int status)
     break;
     
   case OP_GETATTR:
-    tpl = FunctionTemplate::New(GetAttrCompletion);
+    tpl = f4js.GetAttrFunc;
     break;
   
   case OP_READDIR:
-    tpl = FunctionTemplate::New(ReadDirCompletion);
+    tpl = f4js.ReadDirFunc;
     break;
   
   case OP_READLINK:
-    tpl = FunctionTemplate::New(ReadLinkCompletion);
+    tpl = f4js.ReadLinkFunc;
     break;
 
   case OP_CHMOD:
@@ -722,7 +730,7 @@ static void DispatchOp(uv_async_t* handle, int status)
 
   case OP_STATFS:
     --argc; // Ugly. Remove the first argument (path) because not needed.
-    tpl = FunctionTemplate::New(StatfsCompletion);
+    tpl = f4js.StatfsFunc;
     break;
   
   case OP_RENAME:
@@ -730,13 +738,13 @@ static void DispatchOp(uv_async_t* handle, int status)
     break;
 
   case OP_OPEN:
-    tpl = FunctionTemplate::New(OpenCreateCompletion);
-    argv[argc++] = Number::New((double)f4js_cmd.info->flags);      
+    tpl = f4js.OpenCreateFunc;
+    argv[argc++] = Number::New((double)f4js_cmd.info->flags);
     break;
     
   case OP_CREATE:
-    tpl = FunctionTemplate::New(OpenCreateCompletion);
-    argv[argc++] = Number::New((double)f4js_cmd.u.create_mkdir.mode);      
+    tpl = f4js.OpenCreateFunc;
+    argv[argc++] = Number::New((double)f4js_cmd.u.create_mkdir.mode);
     break;
   
   case OP_MKDIR:
@@ -744,13 +752,13 @@ static void DispatchOp(uv_async_t* handle, int status)
     break;
     
   case OP_READ:
-    tpl = FunctionTemplate::New(ReadCompletion);
+    tpl = f4js.ReadFunc;
     buffer = node::Buffer::New(f4js_cmd.u.rw.len);
     passHandle = true;
     break;
     
   case OP_WRITE:
-    tpl = FunctionTemplate::New(WriteCompletion);   
+    tpl = f4js.WriteFunc;
     buffer = node::Buffer::New((char*)f4js_cmd.u.rw.srcBuf, f4js_cmd.u.rw.len);
     passHandle = true;
     break;
@@ -779,11 +787,8 @@ static void DispatchOp(uv_async_t* handle, int status)
     sem_post(f4js.psem);
     return;
   }
-  Local<Function> cb = tpl->GetFunction();
-  std::string cbName = symName + "Completion";
-  cb->SetName(String::NewSymbol(cbName.c_str()));
-  argv[argc++] = cb;
-  handler->Call(Context::GetCurrent()->Global(), argc, argv);  
+  argv[argc++] = tpl;
+  handler->Call(Context::GetCurrent()->Global(), argc, argv);
 }
 
 // ---------------------------------------------------------------------------
@@ -845,7 +850,16 @@ Handle<Value> Start(const Arguments& args)
      std::cerr << "Error: semaphore creation failed - " << strerror(errno) << "\n";
      exit(-1);
   }
- 
+
+  f4js.GetAttrFunc = Persistent<Function>::New(FunctionTemplate::New(GetAttrCompletion)->GetFunction());
+  f4js.ReadDirFunc = Persistent<Function>::New(FunctionTemplate::New(ReadDirCompletion)->GetFunction());
+  f4js.ReadLinkFunc = Persistent<Function>::New(FunctionTemplate::New(ReadLinkCompletion)->GetFunction());
+  f4js.StatfsFunc = Persistent<Function>::New(FunctionTemplate::New(StatfsCompletion)->GetFunction());
+  f4js.OpenCreateFunc = Persistent<Function>::New(FunctionTemplate::New(OpenCreateCompletion)->GetFunction());
+  f4js.ReadFunc = Persistent<Function>::New(FunctionTemplate::New(ReadCompletion)->GetFunction());
+  f4js.WriteFunc = Persistent<Function>::New(FunctionTemplate::New(WriteCompletion)->GetFunction());
+  f4js.GenericFunc = Persistent<Function>::New(FunctionTemplate::New(GenericCompletion)->GetFunction());
+
   uv_async_init(uv_default_loop(), &f4js.async, DispatchOp);
 
   pthread_attr_t attr;
