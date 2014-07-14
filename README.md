@@ -80,7 +80,7 @@ ToDo List
 
 License
 -------
-Since fuse4js dynamically links with your system's FUSE library, which is a component of Linux, it is licensed under the GPL version 2. See the COPYING.txt file for details.
+Fuse4js is released under the terms of the MIT license. See the COPYING.txt file for details.
 
 Contributing
 ------------
