@@ -99,6 +99,7 @@ function readlink(path, cb) {
   return fs.readlink(path, function readlinkCb(err, name) {
     if (err)      
       return cb(-excToErrno(err));
+    var name = pth.resolve(srcRoot, name);
     return cb(0, name);
   });
 }
