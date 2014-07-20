@@ -80,7 +80,7 @@ ToDo List
 
 License
 -------
-Fuse4js is released under the terms of the MIT license. See the COPYING.txt file for details.
+Fuse4js is released under the terms of the MIT license. See the LICENSE.txt file for details.
 
 Contributing
 ------------

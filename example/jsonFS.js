@@ -2,7 +2,9 @@
  * 
  * jsonFS.js
  * 
- * Copyright (c) 2012 VMware, Inc. All rights reserved.
+ * Copyright (c) 2012 - 2014 by VMware, Inc. All Rights Reserved.
+ * http://www.vmware.com
+ * Refer to LICENSE.txt for details of distribution and use.
  * 
  */
 var f4js = require('fuse4js');
