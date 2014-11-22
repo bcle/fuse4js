@@ -21,6 +21,7 @@
   },
   "main": "./build/Release/fuse4js.node",
   "dependencies": {
+    "nan": "^1.4.1"
   },
   "scripts": {
     "install": "node-gyp rebuild"
