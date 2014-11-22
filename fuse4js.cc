@@ -680,7 +680,7 @@ static void DispatchOp(uv_async_t* handle, int status)
 {
   NanEscapableScope();
   std::string symName(fuseop_names[f4js_cmd.op]);
-  Persistent<Function> tpl = f4js.GenericFunc; // default
+  Persistent<Function> *tpl = &f4js.GenericFunc; // default
   f4js_cmd.retval = -EPERM;
   int argc = 0;
   Handle<Value> argv[6]; 
@@ -698,15 +698,15 @@ static void DispatchOp(uv_async_t* handle, int status)
     break;
     
   case OP_GETATTR:
-    tpl = f4js.GetAttrFunc;
+    tpl = &f4js.GetAttrFunc;
     break;
   
   case OP_READDIR:
-    tpl = f4js.ReadDirFunc;
+    tpl = &f4js.ReadDirFunc;
     break;
   
   case OP_READLINK:
-    tpl = f4js.ReadLinkFunc;
+    tpl = &f4js.ReadLinkFunc;
     break;
 
   case OP_CHMOD:
@@ -718,16 +718,16 @@ static void DispatchOp(uv_async_t* handle, int status)
     argv[argc++] = NanNew<String>(f4js_cmd.u.setxattr.value);
     argv[argc++] = NanNew<Number>((double)f4js_cmd.u.setxattr.size);
 #ifdef __APPLE__
-    argv[argc++] = NanNew<String>((double)f4js_cmd.u.setxattr.position);
-    argv[argc++] = NanNew<String>((double)f4js_cmd.u.setxattr.options);
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.u.setxattr.position);
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.u.setxattr.options);
 #else
-    argv[argc++] = NanNew<String>((double)f4js_cmd.u.setxattr.flags);
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.u.setxattr.flags);
 #endif
     break;
 
   case OP_STATFS:
     --argc; // Ugly. Remove the first argument (path) because not needed.
-    tpl = f4js.StatfsFunc;
+    tpl = &f4js.StatfsFunc;
     break;
   
   case OP_RENAME:
@@ -735,27 +735,27 @@ static void DispatchOp(uv_async_t* handle, int status)
     break;
 
   case OP_OPEN:
-    tpl = f4js.OpenCreateFunc;
-    argv[argc++] = NanNew<String>((double)f4js_cmd.info->flags);
+    tpl = &f4js.OpenCreateFunc;
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.info->flags);
     break;
     
   case OP_CREATE:
-    tpl = f4js.OpenCreateFunc;
-    argv[argc++] = NanNew<String>((double)f4js_cmd.u.create_mkdir.mode);
+    tpl = &f4js.OpenCreateFunc;
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.u.create_mkdir.mode);
     break;
   
   case OP_MKDIR:
-    argv[argc++] = NanNew<String>((double)f4js_cmd.u.create_mkdir.mode);      
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.u.create_mkdir.mode);      
     break;
     
   case OP_READ:
-    tpl = f4js.ReadFunc;
+    tpl = &f4js.ReadFunc;
     createBuffer = true;
     passHandle = true;
     break;
     
   case OP_WRITE:
-    tpl = f4js.WriteFunc;
+    tpl = &f4js.WriteFunc;
     createBuffer = true;
     passHandle = true;
     break;
@@ -771,8 +771,8 @@ static void DispatchOp(uv_async_t* handle, int status)
   // Additional args for read/write operations
   if (createBuffer) { 
     // FIXME: 64-bit off_t cannot always fit in a JS number 
-    argv[argc++] = NanNew<String>((double)f4js_cmd.u.rw.offset);  
-    argv[argc++] = NanNew<String>((double)f4js_cmd.u.rw.len);
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.u.rw.offset);  
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.u.rw.len);
     switch (f4js_cmd.op) {
     case OP_READ:
       NanAssignPersistent(f4js.nodeBuffer, NanNewBufferHandle(f4js_cmd.u.rw.len));
@@ -787,7 +787,7 @@ static void DispatchOp(uv_async_t* handle, int status)
     argv[argc++] = NanNew(f4js.nodeBuffer);
   }
   if (passHandle) {
-    argv[argc++] = NanNew<String>((double)f4js_cmd.info->fh); // optional file handle returned by open()
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.info->fh); // optional file handle returned by open()
   }
   Local<Function> handler = Local<Function>::Cast(
     NanNew(f4js.handlers)->Get(NanNew<String>(symName.c_str()))
