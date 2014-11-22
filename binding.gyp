@@ -5,11 +5,12 @@
           "sources": [ "fuse4js.cc" ],
           "include_dirs": [
              '<!@(pkg-config fuse --cflags-only-I | sed s/-I//g)',
-             "<!(node -e \"require('nan')\")"
+             "<!(node -e \"require('nan')\")",
           ],
           "link_settings": {
             "libraries": [
-              '<!@(pkg-config --libs-only-l fuse)'
+              '<!@(pkg-config --libs-only-l fuse)',
+              "-L/usr/local/lib"
             ]
           }
         }
