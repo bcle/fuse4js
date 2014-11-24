@@ -770,10 +770,10 @@ static void DispatchOp(uv_async_t* handle, int status)
   case OP_RELEASE:
     argv[argc++] = NanNew<Number>((double)f4js_cmd.info->fh); // optional file handle returned by open()
     argv[argc++] = NanNew(f4js.GenericFunc);
-
     break;
     
   default:
+    argv[argc++] = NanNew(f4js.GenericFunc);
     break;
   }
   
