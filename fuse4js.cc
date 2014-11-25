@@ -744,8 +744,7 @@ static void DispatchOp(uv_async_t* handle, int status)
   
   case OP_MKDIR:
     argv[argc++] = NanNew<Number>((double)f4js_cmd.u.create_mkdir.mode);  
-    argv[argc++] = NanNew(f4js.GenericFunc);
-    
+    argv[argc++] = NanNew(f4js.GenericFunc);    
     break;
     
   case OP_READ:
@@ -785,6 +784,7 @@ static void DispatchOp(uv_async_t* handle, int status)
     return;
   }
   handler->Call(NanGetCurrentContext()->Global(), argc, argv);
+  NanEscapeScope( NanUndefined());
 }
 
 // ---------------------------------------------------------------------------
