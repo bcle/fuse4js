@@ -15,7 +15,7 @@
 #include <node.h>
 #include <node_buffer.h>
 #include <nan.h>
-
+#include <cstring>
 using v8::FunctionTemplate;
 using v8::Handle;
 using v8::Object;
