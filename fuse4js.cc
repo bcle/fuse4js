@@ -63,6 +63,7 @@ static struct {
 
 enum fuseop_t {  
   OP_GETATTR = 0,
+  OP_TRUNCATE,
   OP_READDIR,
   OP_READLINK,
   OP_CHMOD,
@@ -83,6 +84,7 @@ enum fuseop_t {
 
 const char* fuseop_names[] = {
     "getattr",
+    "truncate",
     "readdir",
     "readlink",
     "chmod",
@@ -109,6 +111,9 @@ static struct {
     struct {
       struct stat *stbuf;
     } getattr;
+    struct {
+      size_t size;
+    } truncate;
     struct {
       void *buf;
       fuse_fill_dir_t filler;
@@ -341,6 +346,12 @@ int f4js_rmdir (const char *path)
 
 // ---------------------------------------------------------------------------
 
+int f4js_truncate (const char *path, off_t size) {
+  f4js_cmd.u.truncate.size = size;
+  return f4js_rpc(OP_TRUNCATE, path);
+}
+
+// ---------------------------------------------------------------------------
 
 void* f4js_init(struct fuse_conn_info *conn)
 {
@@ -362,6 +373,7 @@ void f4js_destroy (void *data)
 void *fuse_thread(void *)
 {
   struct fuse_operations ops = { 0 };
+  ops.truncate = f4js_truncate;
   ops.getattr = f4js_getattr;
   ops.readdir = f4js_readdir;
   ops.readlink = f4js_readlink;
@@ -687,7 +699,11 @@ static void DispatchOp(uv_async_t* handle, int status)
     f4js_cmd.retval = 0; // Will be used as the return value of OP_INIT.
     --argc;              // Ugly. Remove the first argument (path) because not needed.
     break;
-    
+
+  case OP_TRUNCATE:
+    argv[argc++] = Number::New((double)f4js_cmd.u.truncate.size);
+    break;
+
   case OP_GETATTR:
     tpl = f4js.GetAttrFunc;
     break;
