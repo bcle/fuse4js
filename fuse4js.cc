@@ -449,7 +449,7 @@ NAN_METHOD(ProcessReturnValue)
 
 NAN_METHOD(GetAttrCompletion)
 {
-  NanEscapableScope();
+  NanScope();
   ProcessReturnValue(args);
   if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsObject()) {
     memset(f4js_cmd.u.getattr.stbuf, 0, sizeof(*f4js_cmd.u.getattr.stbuf));
@@ -497,15 +497,15 @@ NAN_METHOD(GetAttrCompletion)
 #endif
 
   }
-  sem_post(f4js.psem);  
-  NanEscapeScope(NanUndefined());    
+  sem_post(f4js.psem);
+  NanReturnUndefined();
 }
 
 // ---------------------------------------------------------------------------
 
 NAN_METHOD(ReadDirCompletion)
 {
-  NanEscapableScope();
+  NanScope();
   ProcessReturnValue(args);
   if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsArray()) {
     Handle<Array> ar = Handle<Array>::Cast(args[1]);
@@ -521,15 +521,15 @@ NAN_METHOD(ReadDirCompletion)
       }
     }
   }
-  sem_post(f4js.psem);  
-  NanEscapeScope(NanUndefined());    
+  sem_post(f4js.psem);
+  NanReturnUndefined();
 }
 
 // ---------------------------------------------------------------------------
 
 NAN_METHOD( StatfsCompletion )
 {
-  NanEscapableScope();
+  NanScope();
   ProcessReturnValue(args);
   if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsObject()) {
     memset(f4js_cmd.u.statfs.buf, 0, sizeof(*f4js_cmd.u.statfs.buf));
@@ -601,15 +601,15 @@ NAN_METHOD( StatfsCompletion )
       f4js_cmd.u.statfs.buf->f_namemax = (off_t)num->Value();
     }
   }
-  sem_post(f4js.psem);  
-  NanEscapeScope(NanUndefined()); 
+  sem_post(f4js.psem);
+  NanReturnUndefined();
 }
 
 // ---------------------------------------------------------------------------
 
 NAN_METHOD( ReadLinkCompletion)
 {
-  NanEscapableScope();
+  NanScope();
   ProcessReturnValue(args);
   if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsString()) {
     String::Utf8Value av(args[1]);
@@ -618,33 +618,33 @@ NAN_METHOD( ReadLinkCompletion)
     // terminate string even when it is truncated
     f4js_cmd.u.readlink.dstBuf[f4js_cmd.u.readlink.len - 1] = '\0';
   }
-  sem_post(f4js.psem);  
-  NanEscapeScope(NanUndefined());    
+  sem_post(f4js.psem);
+  NanReturnUndefined();
 }
 
 // ---------------------------------------------------------------------------
 
 NAN_METHOD(GenericCompletion)
 {
-  NanEscapableScope();
+  NanScope();
   bool exiting = (f4js_cmd.op == OP_DESTROY);
-  
+
   ProcessReturnValue(args);
   sem_post(f4js.psem);  
   if (exiting) {
     pthread_join(f4js.fuse_thread, NULL);
     uv_unref((uv_handle_t*) &f4js.async);
     sem_close(f4js.psem);
-    sem_unlink(f4js_semaphore_name().c_str());    
+    sem_unlink(f4js_semaphore_name().c_str());
   }
-  NanEscapeScope(NanUndefined());    
+  NanReturnUndefined();
 }
 
 // ---------------------------------------------------------------------------
 
 NAN_METHOD(OpenCreateCompletion)
 {
-  NanEscapableScope();
+  NanScope();
   ProcessReturnValue(args);
   if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsNumber()) {
     Local<Number> fileHandle = Local<Number>::Cast(args[1]);
@@ -652,16 +652,16 @@ NAN_METHOD(OpenCreateCompletion)
   } else {
     f4js_cmd.info->fh = 0;
   }
-  sem_post(f4js.psem);  
-  NanEscapeScope(NanUndefined());    
+  sem_post(f4js.psem);
+  NanReturnUndefined();
 }
 
 // ---------------------------------------------------------------------------
 
 NAN_METHOD(ReadCompletion)
 {
-  NanEscapableScope();
-  ProcessReturnValue(args);    
+  NanScope();
+  ProcessReturnValue(args);
   if (f4js_cmd.retval >= 0) {
     char *buffer_data = node::Buffer::Data(NanNew(f4js.nodeBuffer));
     if ((size_t)f4js_cmd.retval > f4js_cmd.u.rw.len) {
@@ -670,19 +670,19 @@ NAN_METHOD(ReadCompletion)
     memcpy(f4js_cmd.u.rw.dstBuf, buffer_data, f4js_cmd.retval);
   }
   NanDisposePersistent(f4js.nodeBuffer);
-  sem_post(f4js.psem);  
-  NanEscapeScope(NanUndefined());    
+  sem_post(f4js.psem);
+  NanReturnUndefined();
 }
 
 // ---------------------------------------------------------------------------
 
 NAN_METHOD(WriteCompletion)
 {
-  NanEscapableScope();
+  NanScope();
   ProcessReturnValue(args);
   NanDisposePersistent(f4js.nodeBuffer);
-  sem_post(f4js.psem);  
-  NanEscapeScope(NanUndefined());    
+  sem_post(f4js.psem);
+  NanReturnUndefined();
 }
 
 // ---------------------------------------------------------------------------
@@ -690,7 +690,7 @@ NAN_METHOD(WriteCompletion)
 // Called from the main thread.
 static void DispatchOp(uv_async_t* handle, int status)
 {
-  NanEscapableScope();
+  NanScope();
   std::string symName(fuseop_names[f4js_cmd.op]);
   f4js_cmd.retval = -EPERM;
   int argc = 0;
@@ -800,31 +800,31 @@ static void DispatchOp(uv_async_t* handle, int status)
     return;
   }
   handler->Call(NanGetCurrentContext()->Global(), argc, argv);
-  NanEscapeScope( NanUndefined());
+  NanReturnUndefined();
 }
 
 // ---------------------------------------------------------------------------
 
 NAN_METHOD(Start)
 {
-  NanEscapableScope();
+  NanScope();
   if (args.Length() < 2) {
     NanThrowTypeError("Wrong number of arguments");
-    NanEscapeScope(NanUndefined());
+    NanReturnUndefined();
   }
 
   if (!args[0]->IsString() || !args[1]->IsObject()) {
     NanThrowTypeError("Wrong argument types");
-    NanEscapeScope(NanUndefined());
+    NanReturnUndefined();
   }
 
   String::Utf8Value av(args[0]);
   char *root = *av;
   if (root == NULL) {
     NanThrowTypeError("Path is incorrect");
-    NanEscapeScope(NanUndefined());
+    NanReturnUndefined();
   }
-  
+
   f4js.enableFuseDebug = false;
   if (args.Length() >= 3) {
     Local <Boolean> debug = args[2]->ToBoolean();
@@ -835,7 +835,7 @@ NAN_METHOD(Start)
   if (args.Length() >= 4) {
     if (!args[3]->IsArray()) {
         NanThrowTypeError("Wrong argument types");
-        NanEscapeScope(NanUndefined());
+        NanReturnUndefined();
     }
 
     Handle<Array> mountArgs = Handle<Array>::Cast(args[3]);
@@ -884,7 +884,7 @@ NAN_METHOD(Start)
   pthread_attr_t attr;
   pthread_attr_init(&attr);
   pthread_create(&f4js.fuse_thread, &attr, fuse_thread, NULL);
-  NanEscapeScope(NanNew<String>("dummy"));
+  NanReturnValue(NanNew<String>("dummy"));
 }
 
 // ---------------------------------------------------------------------------
