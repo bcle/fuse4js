@@ -707,17 +707,17 @@ static void DispatchOp(uv_async_t* handle, int status)
     break;
 
   case OP_TRUNCATE:
-    argv[argc++] = Number::New((double)f4js_cmd.u.truncate.size);
+    argv[argc++] = NanNew((double)f4js_cmd.u.truncate.size);
     break;
 
   case OP_GETATTR:
     argv[argc++] = NanNew(f4js.GetAttrFunc);
     break;
-  
+
   case OP_READDIR:
     argv[argc++] = NanNew(f4js.ReadDirFunc);
     break;
-  
+
   case OP_READLINK:
     argv[argc++] = NanNew(f4js.ReadLinkFunc);
     break;
