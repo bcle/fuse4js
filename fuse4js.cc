@@ -8,9 +8,18 @@
  * 
  */
 
+/*
+* Include nan for version compatibility
+*/
+
 #include <node.h>
 #include <node_buffer.h>
-#include <v8.h>
+#include <nan.h>
+#include <cstring>
+using v8::FunctionTemplate;
+using v8::Handle;
+using v8::Object;
+using v8::String;
 
 #define FUSE_USE_VERSION 26
 
@@ -413,7 +422,7 @@ void ConvertDate(Handle<Object> &stat,
                  std::string name,
                  struct timespec *out)
 {
-  Local<Value> prop = stat->Get(String::NewSymbol(name.c_str()));
+  Local<Value> prop = stat->Get(NanNew<String>(name.c_str()));
   if (!prop->IsUndefined() && prop->IsDate()) {
     Local<Date> date = Local<Date>::Cast(prop);
     double dateVal = date->NumberValue();              // total milliseconds
@@ -428,7 +437,7 @@ void ConvertDate(Handle<Object> &stat,
 
 // ---------------------------------------------------------------------------
 
-void ProcessReturnValue(const Arguments& args)
+NAN_METHOD(ProcessReturnValue)
 {
   if (args.Length() >= 1 && args[0]->IsNumber()) {
     Local<Number> retval = Local<Number>::Cast(args[0]);
@@ -438,39 +447,39 @@ void ProcessReturnValue(const Arguments& args)
 
 // ---------------------------------------------------------------------------
 
-Handle<Value> GetAttrCompletion(const Arguments& args)
+NAN_METHOD(GetAttrCompletion)
 {
-  HandleScope scope;
+  NanScope();
   ProcessReturnValue(args);
   if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsObject()) {
     memset(f4js_cmd.u.getattr.stbuf, 0, sizeof(*f4js_cmd.u.getattr.stbuf));
     Handle<Object> stat = Handle<Object>::Cast(args[1]);
     
-    Local<Value> prop = stat->Get(String::NewSymbol("size"));
+    Local<Value> prop = stat->Get(NanNew<String>("size"));
     if (!prop->IsUndefined() && prop->IsNumber()) {
       Local<Number> num = Local<Number>::Cast(prop);
       f4js_cmd.u.getattr.stbuf->st_size = (off_t)num->Value();
     }
     
-    prop = stat->Get(String::NewSymbol("mode"));
+    prop = stat->Get(NanNew<String>("mode"));
     if (!prop->IsUndefined() && prop->IsNumber()) {
       Local<Number> num = Local<Number>::Cast(prop);
       f4js_cmd.u.getattr.stbuf->st_mode = (mode_t)num->Value();
     }
 
-    prop = stat->Get(String::NewSymbol("nlink"));
+    prop = stat->Get(NanNew<String>("nlink"));
     if (!prop->IsUndefined() && prop->IsNumber()) {
       Local<Number> num = Local<Number>::Cast(prop);
       f4js_cmd.u.getattr.stbuf->st_nlink = (mode_t)num->Value();
     }
     
-    prop = stat->Get(String::NewSymbol("uid"));
+    prop = stat->Get(NanNew<String>("uid"));
     if (!prop->IsUndefined() && prop->IsNumber()) {
       Local<Number> num = Local<Number>::Cast(prop);
       f4js_cmd.u.getattr.stbuf->st_uid = (uid_t)num->Value();
     }
 
-    prop = stat->Get(String::NewSymbol("gid"));
+    prop = stat->Get(NanNew<String>("gid"));
     if (!prop->IsUndefined() && prop->IsNumber()) {
       Local<Number> num = Local<Number>::Cast(prop);
       f4js_cmd.u.getattr.stbuf->st_gid = (gid_t)num->Value();
@@ -488,15 +497,15 @@ Handle<Value> GetAttrCompletion(const Arguments& args)
 #endif
 
   }
-  sem_post(f4js.psem);  
-  return scope.Close(Undefined());    
+  sem_post(f4js.psem);
+  NanReturnUndefined();
 }
 
 // ---------------------------------------------------------------------------
 
-Handle<Value> ReadDirCompletion(const Arguments& args)
+NAN_METHOD(ReadDirCompletion)
 {
-  HandleScope scope;
+  NanScope();
   ProcessReturnValue(args);
   if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsArray()) {
     Handle<Array> ar = Handle<Array>::Cast(args[1]);
@@ -512,95 +521,95 @@ Handle<Value> ReadDirCompletion(const Arguments& args)
       }
     }
   }
-  sem_post(f4js.psem);  
-  return scope.Close(Undefined());    
+  sem_post(f4js.psem);
+  NanReturnUndefined();
 }
 
 // ---------------------------------------------------------------------------
 
-Handle<Value> StatfsCompletion(const Arguments& args)
+NAN_METHOD( StatfsCompletion )
 {
-  HandleScope scope;
+  NanScope();
   ProcessReturnValue(args);
   if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsObject()) {
     memset(f4js_cmd.u.statfs.buf, 0, sizeof(*f4js_cmd.u.statfs.buf));
     Handle<Object> stat = Handle<Object>::Cast(args[1]);
 
-    Local<Value> prop = stat->Get(String::NewSymbol("bsize"));
+    Local<Value> prop = stat->Get(NanNew<String>("bsize"));
     if (!prop->IsUndefined() && prop->IsNumber()) {
       Local<Number> num = Local<Number>::Cast(prop);
       f4js_cmd.u.statfs.buf->f_bsize = (off_t)num->Value();
     }
 
-    prop = stat->Get(String::NewSymbol("frsize"));
+    prop = stat->Get(NanNew<String>("frsize"));
     if (!prop->IsUndefined() && prop->IsNumber()) {
       Local<Number> num = Local<Number>::Cast(prop);
       f4js_cmd.u.statfs.buf->f_frsize = (off_t)num->Value();
     }
 
-    prop = stat->Get(String::NewSymbol("blocks"));
+    prop = stat->Get(NanNew<String>("blocks"));
     if (!prop->IsUndefined() && prop->IsNumber()) {
       Local<Number> num = Local<Number>::Cast(prop);
       f4js_cmd.u.statfs.buf->f_blocks = (off_t)num->Value();
     }
 
-    prop = stat->Get(String::NewSymbol("bfree"));
+    prop = stat->Get(NanNew<String>("bfree"));
     if (!prop->IsUndefined() && prop->IsNumber()) {
       Local<Number> num = Local<Number>::Cast(prop);
       f4js_cmd.u.statfs.buf->f_bfree = (off_t)num->Value();
     }
 
-    prop = stat->Get(String::NewSymbol("bavail"));
+    prop = stat->Get(NanNew<String>("bavail"));
     if (!prop->IsUndefined() && prop->IsNumber()) {
       Local<Number> num = Local<Number>::Cast(prop);
       f4js_cmd.u.statfs.buf->f_bavail = (off_t)num->Value();
     }
 
-    prop = stat->Get(String::NewSymbol("files"));
+    prop = stat->Get(NanNew<String>("files"));
     if (!prop->IsUndefined() && prop->IsNumber()) {
       Local<Number> num = Local<Number>::Cast(prop);
       f4js_cmd.u.statfs.buf->f_files = (off_t)num->Value();
     }
 
-    prop = stat->Get(String::NewSymbol("ffree"));
+    prop = stat->Get(NanNew<String>("ffree"));
     if (!prop->IsUndefined() && prop->IsNumber()) {
       Local<Number> num = Local<Number>::Cast(prop);
       f4js_cmd.u.statfs.buf->f_ffree = (off_t)num->Value();
     }
 
-    prop = stat->Get(String::NewSymbol("favail"));
+    prop = stat->Get(NanNew<String>("favail"));
     if (!prop->IsUndefined() && prop->IsNumber()) {
       Local<Number> num = Local<Number>::Cast(prop);
       f4js_cmd.u.statfs.buf->f_favail = (off_t)num->Value();
     }
 
-    prop = stat->Get(String::NewSymbol("fsid"));
+    prop = stat->Get(NanNew<String>("fsid"));
     if (!prop->IsUndefined() && prop->IsNumber()) {
       Local<Number> num = Local<Number>::Cast(prop);
       f4js_cmd.u.statfs.buf->f_fsid = (off_t)num->Value();
     }
 
-    prop = stat->Get(String::NewSymbol("flag"));
+    prop = stat->Get(NanNew<String>("flag"));
     if (!prop->IsUndefined() && prop->IsNumber()) {
       Local<Number> num = Local<Number>::Cast(prop);
       f4js_cmd.u.statfs.buf->f_flag = (off_t)num->Value();
     }
 
-    prop = stat->Get(String::NewSymbol("namemax"));
+    prop = stat->Get(NanNew<String>("namemax"));
     if (!prop->IsUndefined() && prop->IsNumber()) {
       Local<Number> num = Local<Number>::Cast(prop);
       f4js_cmd.u.statfs.buf->f_namemax = (off_t)num->Value();
     }
   }
-  sem_post(f4js.psem);  
-  return scope.Close(Undefined()); 
+  sem_post(f4js.psem);
+  NanReturnUndefined();
 }
 
 // ---------------------------------------------------------------------------
 
-Handle<Value> ReadLinkCompletion(const Arguments& args)
+NAN_METHOD( ReadLinkCompletion)
 {
-  HandleScope scope;
+  NanScope();
   ProcessReturnValue(args);
   if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsString()) {
     String::Utf8Value av(args[1]);
@@ -609,33 +618,33 @@ Handle<Value> ReadLinkCompletion(const Arguments& args)
     // terminate string even when it is truncated
     f4js_cmd.u.readlink.dstBuf[f4js_cmd.u.readlink.len - 1] = '\0';
   }
-  sem_post(f4js.psem);  
-  return scope.Close(Undefined());    
+  sem_post(f4js.psem);
+  NanReturnUndefined();
 }
 
 // ---------------------------------------------------------------------------
 
-Handle<Value> GenericCompletion(const Arguments& args)
+NAN_METHOD(GenericCompletion)
 {
-  HandleScope scope;
+  NanScope();
   bool exiting = (f4js_cmd.op == OP_DESTROY);
-  
+
   ProcessReturnValue(args);
   sem_post(f4js.psem);  
   if (exiting) {
     pthread_join(f4js.fuse_thread, NULL);
     uv_unref((uv_handle_t*) &f4js.async);
     sem_close(f4js.psem);
-    sem_unlink(f4js_semaphore_name().c_str());    
+    sem_unlink(f4js_semaphore_name().c_str());
   }
-  return scope.Close(Undefined());    
+  NanReturnUndefined();
 }
 
 // ---------------------------------------------------------------------------
 
-Handle<Value> OpenCreateCompletion(const Arguments& args)
+NAN_METHOD(OpenCreateCompletion)
 {
-  HandleScope scope;
+  NanScope();
   ProcessReturnValue(args);
   if (f4js_cmd.retval == 0 && args.Length() >= 2 && args[1]->IsNumber()) {
     Local<Number> fileHandle = Local<Number>::Cast(args[1]);
@@ -643,37 +652,37 @@ Handle<Value> OpenCreateCompletion(const Arguments& args)
   } else {
     f4js_cmd.info->fh = 0;
   }
-  sem_post(f4js.psem);  
-  return scope.Close(Undefined());    
+  sem_post(f4js.psem);
+  NanReturnUndefined();
 }
 
 // ---------------------------------------------------------------------------
 
-Handle<Value> ReadCompletion(const Arguments& args)
+NAN_METHOD(ReadCompletion)
 {
-  HandleScope scope;
-  ProcessReturnValue(args);    
+  NanScope();
+  ProcessReturnValue(args);
   if (f4js_cmd.retval >= 0) {
-    char *buffer_data = node::Buffer::Data(f4js.nodeBuffer);
+    char *buffer_data = node::Buffer::Data(NanNew(f4js.nodeBuffer));
     if ((size_t)f4js_cmd.retval > f4js_cmd.u.rw.len) {
       f4js_cmd.retval = f4js_cmd.u.rw.len;
     }
     memcpy(f4js_cmd.u.rw.dstBuf, buffer_data, f4js_cmd.retval);
   }
-  f4js.nodeBuffer.Dispose();
-  sem_post(f4js.psem);  
-  return scope.Close(Undefined());    
+  NanDisposePersistent(f4js.nodeBuffer);
+  sem_post(f4js.psem);
+  NanReturnUndefined();
 }
 
 // ---------------------------------------------------------------------------
 
-Handle<Value> WriteCompletion(const Arguments& args)
+NAN_METHOD(WriteCompletion)
 {
-  HandleScope scope;
+  NanScope();
   ProcessReturnValue(args);
-  f4js.nodeBuffer.Dispose();
-  sem_post(f4js.psem);  
-  return scope.Close(Undefined());    
+  NanDisposePersistent(f4js.nodeBuffer);
+  sem_post(f4js.psem);
+  NanReturnUndefined();
 }
 
 // ---------------------------------------------------------------------------
@@ -681,142 +690,141 @@ Handle<Value> WriteCompletion(const Arguments& args)
 // Called from the main thread.
 static void DispatchOp(uv_async_t* handle, int status)
 {
-  HandleScope scope;
+  NanScope();
   std::string symName(fuseop_names[f4js_cmd.op]);
-  Persistent<Function> tpl = f4js.GenericFunc; // default
   f4js_cmd.retval = -EPERM;
   int argc = 0;
   Handle<Value> argv[6]; 
-  Local<String> path = String::New(f4js_cmd.in_path); 
+  Local<String> path = NanNew<String>(f4js_cmd.in_path); 
   argv[argc++] = path;
-  node::Buffer* buffer = NULL; // used for read/write operations
-  bool passHandle = false;
-  
   switch (f4js_cmd.op) {
   
   case OP_INIT:
   case OP_DESTROY:
     f4js_cmd.retval = 0; // Will be used as the return value of OP_INIT.
     --argc;              // Ugly. Remove the first argument (path) because not needed.
+    argv[argc++] = NanNew(f4js.GenericFunc);
     break;
 
   case OP_TRUNCATE:
-    argv[argc++] = Number::New((double)f4js_cmd.u.truncate.size);
+    argv[argc++] = NanNew((double)f4js_cmd.u.truncate.size);
     break;
 
   case OP_GETATTR:
-    tpl = f4js.GetAttrFunc;
+    argv[argc++] = NanNew(f4js.GetAttrFunc);
     break;
-  
+
   case OP_READDIR:
-    tpl = f4js.ReadDirFunc;
+    argv[argc++] = NanNew(f4js.ReadDirFunc);
     break;
-  
+
   case OP_READLINK:
-    tpl = f4js.ReadLinkFunc;
+    argv[argc++] = NanNew(f4js.ReadLinkFunc);
     break;
 
   case OP_CHMOD:
-    argv[argc++] = Number::New((double)f4js_cmd.u.chmod.mode);
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.u.chmod.mode);
     break;
 
   case OP_SETXATTR:
-    argv[argc++] = String::New(f4js_cmd.u.setxattr.name);
-    argv[argc++] = String::New(f4js_cmd.u.setxattr.value);
-    argv[argc++] = Number::New((double)f4js_cmd.u.setxattr.size);
+    argv[argc++] = NanNew<String>(f4js_cmd.u.setxattr.name);
+    argv[argc++] = NanNew<String>(f4js_cmd.u.setxattr.value);
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.u.setxattr.size);
 #ifdef __APPLE__
-    argv[argc++] = Number::New((double)f4js_cmd.u.setxattr.position);
-    argv[argc++] = Number::New((double)f4js_cmd.u.setxattr.options);
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.u.setxattr.position);
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.u.setxattr.options);
 #else
-    argv[argc++] = Number::New((double)f4js_cmd.u.setxattr.flags);
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.u.setxattr.flags);
 #endif
     break;
 
   case OP_STATFS:
     --argc; // Ugly. Remove the first argument (path) because not needed.
-    tpl = f4js.StatfsFunc;
+    argv[argc++] = NanNew(f4js.StatfsFunc);
     break;
   
   case OP_RENAME:
-    argv[argc++] = String::New(f4js_cmd.u.rename.dst);
+    argv[argc++] = NanNew<String>(f4js_cmd.u.rename.dst);
+    argv[argc++] = NanNew(f4js.GenericFunc);
     break;
 
   case OP_OPEN:
-    tpl = f4js.OpenCreateFunc;
-    argv[argc++] = Number::New((double)f4js_cmd.info->flags);
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.info->flags);
+    argv[argc++] = NanNew(f4js.OpenCreateFunc);
     break;
     
   case OP_CREATE:
-    tpl = f4js.OpenCreateFunc;
-    argv[argc++] = Number::New((double)f4js_cmd.u.create_mkdir.mode);
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.u.create_mkdir.mode);
+    argv[argc++] = NanNew(f4js.OpenCreateFunc);
     break;
   
   case OP_MKDIR:
-    argv[argc++] = Number::New((double)f4js_cmd.u.create_mkdir.mode);      
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.u.create_mkdir.mode);  
+    argv[argc++] = NanNew(f4js.GenericFunc);    
     break;
     
   case OP_READ:
-    tpl = f4js.ReadFunc;
-    buffer = node::Buffer::New(f4js_cmd.u.rw.len);
-    passHandle = true;
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.u.rw.offset);  
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.u.rw.len);
+    NanAssignPersistent(f4js.nodeBuffer, NanNewBufferHandle(f4js_cmd.u.rw.len));
+    argv[argc++] = NanNew(f4js.nodeBuffer);
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.info->fh); // optional file handle returned by open()
+    argv[argc++] = NanNew(f4js.ReadFunc);
+
     break;
     
   case OP_WRITE:
-    tpl = f4js.WriteFunc;
-    buffer = node::Buffer::New((char*)f4js_cmd.u.rw.srcBuf, f4js_cmd.u.rw.len);
-    passHandle = true;
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.u.rw.offset);  
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.u.rw.len);
+    NanAssignPersistent(f4js.nodeBuffer, NanNewBufferHandle((char*)f4js_cmd.u.rw.srcBuf, f4js_cmd.u.rw.len));
+    argv[argc++] = NanNew(f4js.nodeBuffer);
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.info->fh); // optional file handle returned by open()
+    argv[argc++] = NanNew(f4js.WriteFunc);
     break;
     
   case OP_RELEASE:
-    passHandle = true;
+    argv[argc++] = NanNew<Number>((double)f4js_cmd.info->fh); // optional file handle returned by open()
+    argv[argc++] = NanNew(f4js.GenericFunc);
     break;
     
   default:
+    argv[argc++] = NanNew(f4js.GenericFunc);
     break;
   }
   
-  // Additional args for read/write operations
-  if (buffer) { 
-    // FIXME: 64-bit off_t cannot always fit in a JS number 
-    argv[argc++] = Number::New((double)f4js_cmd.u.rw.offset);  
-    argv[argc++] = Number::New((double)f4js_cmd.u.rw.len);
-    f4js.nodeBuffer = Persistent<Object>::New(buffer->handle_);   
-    argv[argc++] = f4js.nodeBuffer;
-  }
-  if (passHandle) {
-    argv[argc++] = Number::New((double)f4js_cmd.info->fh); // optional file handle returned by open()
-  }
-  Local<Function> handler = Local<Function>::Cast(f4js.handlers->Get(String::NewSymbol(symName.c_str())));
+  Local<Function> handler = Local<Function>::Cast(
+    NanNew(f4js.handlers)->Get(NanNew<String>(symName.c_str()))
+  );
   if (handler->IsUndefined()) {
     sem_post(f4js.psem);
     return;
   }
-  argv[argc++] = tpl;
-  handler->Call(Context::GetCurrent()->Global(), argc, argv);
+  handler->Call(NanGetCurrentContext()->Global(), argc, argv);
+  NanReturnUndefined();
 }
 
 // ---------------------------------------------------------------------------
 
-Handle<Value> Start(const Arguments& args)
+NAN_METHOD(Start)
 {
-  HandleScope scope;
+  NanScope();
   if (args.Length() < 2) {
-    ThrowException(Exception::TypeError(String::New("Wrong number of arguments")));
-    return scope.Close(Undefined());
+    NanThrowTypeError("Wrong number of arguments");
+    NanReturnUndefined();
   }
 
   if (!args[0]->IsString() || !args[1]->IsObject()) {
-    ThrowException(Exception::TypeError(String::New("Wrong argument types")));
-    return scope.Close(Undefined());
+    NanThrowTypeError("Wrong argument types");
+    NanReturnUndefined();
   }
 
   String::Utf8Value av(args[0]);
   char *root = *av;
   if (root == NULL) {
-    ThrowException(Exception::TypeError(String::New("Path is incorrect")));
-    return scope.Close(Undefined());
+    NanThrowTypeError("Path is incorrect");
+    NanReturnUndefined();
   }
-  
+
   f4js.enableFuseDebug = false;
   if (args.Length() >= 3) {
     Local <Boolean> debug = args[2]->ToBoolean();
@@ -826,28 +834,33 @@ Handle<Value> Start(const Arguments& args)
   f4js.extraArgc = 0;
   if (args.Length() >= 4) {
     if (!args[3]->IsArray()) {
-        ThrowException(Exception::TypeError(String::New("Wrong argument types")));
-        return scope.Close(Undefined());
+        NanThrowTypeError("Wrong argument types");
+        NanReturnUndefined();
     }
 
     Handle<Array> mountArgs = Handle<Array>::Cast(args[3]);
     f4js.extraArgv = (char**)malloc(mountArgs->Length() * sizeof(char*));
-
+    int argLen = 0;
+    int argSize = 0;
     for (uint32_t i = 0; i < mountArgs->Length(); i++) {
       Local<Value> arg = mountArgs->Get(i);
 
       if (!arg->IsUndefined() && arg->IsString()) {
         Local<String> stringArg = Local<String>::Cast(arg);
-        String::AsciiValue av(stringArg);  
-        f4js.extraArgv[f4js.extraArgc] = (char*)malloc(sizeof(av));
-        memcpy(f4js.extraArgv[f4js.extraArgc], *av, sizeof(av));
+
+        char *handle = *NanAsciiString(stringArg);  
+        argLen = std::strlen(handle)+1;
+        argSize = argLen * sizeof(char);
+        f4js.extraArgv[f4js.extraArgc] = (char*)malloc(argSize);
+        memcpy(f4js.extraArgv[f4js.extraArgc], (void *) handle, argSize);
         f4js.extraArgc++;
       }
     }
   }
   
   f4js.root = root;
-  f4js.handlers = Persistent<Object>::New(Local<Object>::Cast(args[1]));
+  NanAssignPersistent( f4js.handlers, Local<Object>::Cast(args[1]) );
+
   f4js.psem = sem_open(f4js_semaphore_name().c_str(), O_CREAT, S_IRUSR | S_IWUSR, 0);
   if (f4js.psem == SEM_FAILED)
   {
@@ -855,28 +868,30 @@ Handle<Value> Start(const Arguments& args)
      exit(-1);
   }
 
-  f4js.GetAttrFunc = Persistent<Function>::New(FunctionTemplate::New(GetAttrCompletion)->GetFunction());
-  f4js.ReadDirFunc = Persistent<Function>::New(FunctionTemplate::New(ReadDirCompletion)->GetFunction());
-  f4js.ReadLinkFunc = Persistent<Function>::New(FunctionTemplate::New(ReadLinkCompletion)->GetFunction());
-  f4js.StatfsFunc = Persistent<Function>::New(FunctionTemplate::New(StatfsCompletion)->GetFunction());
-  f4js.OpenCreateFunc = Persistent<Function>::New(FunctionTemplate::New(OpenCreateCompletion)->GetFunction());
-  f4js.ReadFunc = Persistent<Function>::New(FunctionTemplate::New(ReadCompletion)->GetFunction());
-  f4js.WriteFunc = Persistent<Function>::New(FunctionTemplate::New(WriteCompletion)->GetFunction());
-  f4js.GenericFunc = Persistent<Function>::New(FunctionTemplate::New(GenericCompletion)->GetFunction());
+  // NanSetPrototypeTemplate()
+  // f4js.GetAttrFunc = Persistent<Function>::New(FunctionTemplate::New(GetAttrCompletion)->GetFunction());
+  NanAssignPersistent(f4js.GetAttrFunc, NanNew<FunctionTemplate>(GetAttrCompletion)->GetFunction() );
+  NanAssignPersistent(f4js.ReadDirFunc, NanNew<FunctionTemplate>(ReadDirCompletion)->GetFunction());
+  NanAssignPersistent(f4js.ReadLinkFunc, NanNew<FunctionTemplate>(ReadLinkCompletion)->GetFunction());
+  NanAssignPersistent(f4js.StatfsFunc, NanNew<FunctionTemplate>(StatfsCompletion)->GetFunction());
+  NanAssignPersistent(f4js.OpenCreateFunc, NanNew<FunctionTemplate>(OpenCreateCompletion)->GetFunction());
+  NanAssignPersistent(f4js.ReadFunc, NanNew<FunctionTemplate>(ReadCompletion)->GetFunction());
+  NanAssignPersistent(f4js.WriteFunc, NanNew<FunctionTemplate>(WriteCompletion)->GetFunction());
+  NanAssignPersistent(f4js.GenericFunc, NanNew<FunctionTemplate>(GenericCompletion)->GetFunction());
 
-  uv_async_init(uv_default_loop(), &f4js.async, DispatchOp);
+  uv_async_init(uv_default_loop(), &f4js.async, (uv_async_cb) DispatchOp);
 
   pthread_attr_t attr;
   pthread_attr_init(&attr);
   pthread_create(&f4js.fuse_thread, &attr, fuse_thread, NULL);
-  return scope.Close(String::New("dummy"));
+  NanReturnValue(NanNew<String>("dummy"));
 }
 
 // ---------------------------------------------------------------------------
 
 void init(Handle<Object> target)
 {
-  target->Set(String::NewSymbol("start"), FunctionTemplate::New(Start)->GetFunction());
+  target->Set(NanNew<String>("start"), NanNew<FunctionTemplate>(Start)->GetFunction());
 }
 
 // ---------------------------------------------------------------------------
