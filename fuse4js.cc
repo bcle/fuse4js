@@ -800,7 +800,7 @@ static void DispatchOp(uv_async_t* handle, int status)
     return;
   }
   handler->Call(NanGetCurrentContext()->Global(), argc, argv);
-  NanReturnUndefined();
+  // NanReturnUndefined();
 }
 
 // ---------------------------------------------------------------------------
