@@ -724,6 +724,7 @@ static void DispatchOp(uv_async_t* handle, int status)
 
   case OP_CHMOD:
     argv[argc++] = NanNew<Number>((double)f4js_cmd.u.chmod.mode);
+    argv[argc++] = NanNew(f4js.GenericFunc);
     break;
 
   case OP_SETXATTR:
