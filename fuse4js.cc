@@ -381,7 +381,8 @@ void f4js_destroy (void *data)
 
 void *fuse_thread(void *)
 {
-  struct fuse_operations ops = { 0 };
+  struct fuse_operations ops;
+  memset(&ops, 0, sizeof(ops));
   ops.truncate = f4js_truncate;
   ops.getattr = f4js_getattr;
   ops.readdir = f4js_readdir;
