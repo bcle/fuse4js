@@ -708,6 +708,7 @@ static void DispatchOp(uv_async_t* handle, int status)
 
   case OP_TRUNCATE:
     argv[argc++] = NanNew((double)f4js_cmd.u.truncate.size);
+    argv[argc++] = NanNew(f4js.GenericFunc);
     break;
 
   case OP_GETATTR:
